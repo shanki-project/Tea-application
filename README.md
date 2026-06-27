@@ -1,214 +1,223 @@
-# Shankis Tea — Full-Stack E-Commerce with RBAC
+<div align="center">
 
-A minimalist, ritualistic tea brand store (Dawn / Dusk / Night blends) with a
-**Python FastAPI** backend, **MySQL** database, **JWT auth**, **role-based access
-control**, and a **mock checkout** (no real payment gateway). The existing
-static landing page is kept as the brand entry point; the shop, cart, checkout,
-account, and admin pages are wired to the REST API.
+# 🍵 SHANKIS TEA
 
-> Everything here is free to run locally — MySQL Community Edition, no paid
-> services, no external payment provider.
+### _Steeped in Silence_ — a luxury tea e-commerce experience
+
+Dawn to wake · Dusk to unwind · Night to rest
+
+<br/>
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)
+![JWT](https://img.shields.io/badge/Auth-JWT%20%2B%20bcrypt-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+</div>
 
 ---
 
-## Tech stack
+## 🎬 The Story
 
-| Layer    | Choice |
-|----------|--------|
-| Backend  | FastAPI (Python 3.12+) |
-| Database | MySQL 8 (InnoDB, utf8mb4) |
-| ORM      | SQLAlchemy 2.0 + PyMySQL |
-| Auth     | JWT (python-jose) + bcrypt (passlib) |
-| Migrations | Alembic |
-| Frontend | Static HTML/CSS/vanilla JS calling the REST API |
-| Payment  | Mock/simulated only — fake transaction id, no gateway |
+<div align="center">
 
-## Roles (RBAC)
+<video src="public/tea-story-final.mp4" controls muted loop playsinline width="80%"></video>
+
+_If the video doesn't play inline, ▶️ **[click here to watch `tea-story-final.mp4`](public/tea-story-final.mp4)**._
+_(Inline playback works in VS Code's Markdown preview and most local viewers.)_
+
+</div>
+
+---
+
+## 🫖 The Collection
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="public/dawn-product.png" width="170" alt="Dawn" /><br/>
+      <b>DAWN</b><br/>
+      <sub>Morning Clarity · Green tea</sub><br/>
+      <sub>Tulsi · Rose · Cardamom</sub><br/>
+      <b>₹890</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="public/dusk-product.png" width="170" alt="Dusk" /><br/>
+      <b>DUSK</b> <sub>★ Bestseller</sub><br/>
+      <sub>Evening Unwind · Black tea</sub><br/>
+      <sub>Chamomile · Rose · Cardamom</sub><br/>
+      <b>₹950</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="public/night-product.png" width="170" alt="Night" /><br/>
+      <b>NIGHT</b><br/>
+      <sub>Deep Rest · White tea</sub><br/>
+      <sub>Ashwagandha · Rose · Lavender</sub><br/>
+      <b>₹1,050</b>
+    </td>
+  </tr>
+</table>
+
+<sub>…plus 17 more blends across Green, Black, White, Oolong & Herbal categories (20 total).</sub>
+
+</div>
+
+---
+
+## ✨ What it is
+
+A full-stack tea store with **role-based access control (RBAC)**. A single Python
+service serves the REST **API** _and_ the **website** — so there is just one thing to
+deploy. Payment is **simulated** (no real gateway, no money moves).
+
+| | Feature |
+|---|---|
+| 🛍️ | **Storefront** — 20 blends, search & category filter, product detail + reviews |
+| 🔐 | **Auth** — JWT login/signup, bcrypt passwords, password reset & change |
+| 👥 | **RBAC** — Super Admin · Admin/Staff · Customer · Guest |
+| 🛒 | **Cart & Checkout** — persisted per user, mock "Processing → Paid → Confirmed" flow |
+| 📦 | **Orders** — status workflow (Placed → Packed → Shipped → Delivered), cancel + auto-restock |
+| ⭐ | **Reviews** — write/edit/delete on purchased products only |
+| 📊 | **Admin dashboard** — product CRUD, inventory, **sales analytics with charts**, CSV export |
+| 🖼️ | **Image uploads** — admins upload product photos (persisted to a volume) |
+| 📝 | **Audit log** — every admin action recorded (Super Admin only) |
+
+---
+
+## 🧱 Tech stack
+
+<div align="center">
+
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | FastAPI (Python 3.12), Gunicorn + Uvicorn workers |
+| **Database** | MySQL 8 · InnoDB · utf8mb4 |
+| **ORM / Migrations** | SQLAlchemy 2.0 + PyMySQL · Alembic |
+| **Auth** | JWT (python-jose) · bcrypt (passlib) |
+| **Frontend** | HTML / CSS / vanilla JS · Chart.js (admin) |
+| **Packaging** | Docker + docker-compose |
+| **Payment** | Mock / simulated (fake transaction id) |
+
+</div>
+
+---
+
+## 🎭 Roles & permissions
 
 | Role | Can do |
 |------|--------|
-| **Super Admin** | Everything: manage admin/staff accounts (create/promote/demote/deactivate/delete), view all users & orders, view audit logs |
-| **Admin / Staff** | Product CRUD, inventory/stock, view & advance order status. Cannot manage admins or see audit logs |
-| **Customer** | Browse, cart, checkout (mock payment), order history & tracking, review purchased products |
-| **Guest** | Browse products only; restricted actions redirect to login/signup |
+| **👑 Super Admin** | Everything — manage admin/staff accounts, all users & orders, analytics, audit log |
+| **🛠️ Admin / Staff** | Product CRUD, inventory/stock, order status, image uploads |
+| **🙋 Customer** | Browse, cart, checkout, order history & tracking, reviews |
+| **👤 Guest** | Browse only — restricted actions redirect to login |
 
 ---
 
-## Project structure
+## 🚀 Quick start (Docker)
+
+> Requires Docker Desktop. MySQL runs in a container — nothing else to install.
+
+```bash
+cp .env.example .env          # then edit the secrets
+docker compose up -d --build
+docker compose exec backend python -m scripts.seed   # first run only
+```
+
+<div align="center">
+
+| | URL |
+|---|---|
+| 🌐 **Landing (new design)** | http://localhost:8000/home.html |
+| 🛍️ **Shop** | http://localhost:8000/shop.html |
+| 📚 **API docs (Swagger)** | http://localhost:8000/api/docs |
+| ❤️ **Health** | http://localhost:8000/api/health |
+
+</div>
+
+**Default Super Admin** → `superadmin@shankistea.com` / `ChangeMe123!` _(change after first login)_
+
+---
+
+## 💻 Run locally (without Docker)
+
+<details>
+<summary><b>Click to expand — local Python + MySQL setup</b></summary>
+
+<br/>
+
+**1. Install MySQL Community Server** (free) and create the DB:
+```sql
+CREATE DATABASE shankistea CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'shankis'@'localhost' IDENTIFIED BY 'your-password';
+GRANT ALL PRIVILEGES ON shankistea.* TO 'shankis'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+**2. Configure** — in `.env` set `MYSQL_HOST=localhost` and matching `MYSQL_*` values.
+
+**3. Install, migrate, seed, run:**
+```bash
+cd backend
+python -m venv .venv
+# Windows: .venv\Scripts\activate   ·   macOS/Linux: source .venv/bin/activate
+pip install -r requirements-dev.txt
+alembic upgrade head          # create all tables
+python -m scripts.seed        # Super Admin + 20 products
+uvicorn app.main:app --reload # http://localhost:8000
+```
+
+</details>
+
+---
+
+## 🗂️ Project structure
 
 ```
 shankis-tea/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              FastAPI entry: API at /api + serves frontend at /
-│   │   ├── core/               config, database, security (JWT/bcrypt), utils
-│   │   ├── models/             SQLAlchemy models (users, roles, products, cart,
-│   │   │                         orders, order_items, reviews, audit_logs)
-│   │   ├── schemas/            Pydantic request/response models
-│   │   ├── crud/               data-access functions
-│   │   ├── services/           auth, checkout (mock payment), audit logging
-│   │   └── api/
-│   │       ├── deps.py         get_current_user + RBAC guards
-│   │       ├── router.py       aggregates routers
-│   │       └── routes/         auth, users, products, cart, orders, reviews, dashboard
-│   ├── alembic/                migrations (0001_initial_schema.py creates all tables)
-│   ├── scripts/
-│   │   ├── seed.py             Super Admin + Dawn/Dusk/Night products + roles
-│   │   └── start.sh            container entrypoint (migrate → serve)
-│   ├── tests/                  pytest
-│   ├── requirements.txt
-│   └── Dockerfile
-├── public/                     frontend: index.html (landing) + shop/login/signup/
-│                                 cart/checkout/account/admin + css/ + js/
-├── docker-compose.yml          backend + MySQL
+│   │   ├── main.py        FastAPI entry — API at /api + website at /
+│   │   ├── core/          config · database · security (JWT/bcrypt)
+│   │   ├── models/        SQLAlchemy tables
+│   │   ├── schemas/       Pydantic request/response models
+│   │   ├── crud/          data-access functions
+│   │   ├── services/      business logic (auth · checkout · audit)
+│   │   └── api/routes/    auth · users · products · cart · orders ·
+│   │                        reviews · dashboard · uploads · health
+│   ├── alembic/           database migrations
+│   ├── scripts/           start.sh (entrypoint) · seed.py
+│   └── tests/             pytest (runs on SQLite)
+├── public/                website + product images + tea video
+├── docker-compose.yml     backend + MySQL
 ├── .env.example
-└── README.md
+├── DEPLOYMENT.docx        ← full deploy & ops guide (Word)
+└── README.md              ← you are here
 ```
 
 ---
 
-## Option A — Run with Docker (easiest)
+## 🧪 Tests & lint
 
-Requires Docker Desktop. MySQL runs in a container, so you don't install it.
-
-```bash
-cp .env.example .env            # edit passwords + SECRET_KEY
-docker compose up --build
-# migrations run automatically on startup; then seed once:
-docker compose exec backend python -m scripts.seed
-```
-
-Open **http://localhost:8000** — API docs at **/api/docs**.
-
----
-
-## Option B — Run locally with MySQL Community Server (free)
-
-### 1. Install MySQL Community Server (free)
-- **Windows:** download the **MySQL Community Server** + **MySQL Installer** from
-  https://dev.mysql.com/downloads/installer/ → install "Server only" (or full),
-  set a root password during setup.
-- **macOS:** `brew install mysql && brew services start mysql`
-- **Ubuntu/Debian:** `sudo apt install mysql-server && sudo systemctl start mysql`
-
-Verify it's running: `mysql --version`.
-
-### 2. Create the database and a user
-Open a MySQL shell (`mysql -u root -p`) and run:
-
-```sql
-CREATE DATABASE shankistea CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'shankis'@'localhost' IDENTIFIED BY 'change-me-strong-password';
-GRANT ALL PRIVILEGES ON shankistea.* TO 'shankis'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-### 3. Configure environment variables
-```bash
-cp .env.example .env
-```
-Edit `.env` and set (for a local install):
-```
-MYSQL_HOST=localhost
-MYSQL_DB=shankistea
-MYSQL_USER=shankis
-MYSQL_PASSWORD=change-me-strong-password
-SECRET_KEY=<output of: openssl rand -hex 32>
-```
-
-### 4. Create a virtual environment and install dependencies
 ```bash
 cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate     macOS/Linux: source .venv/bin/activate
-pip install -r requirements-dev.txt
+pytest          # integration tests on in-memory SQLite (no MySQL needed)
+ruff check .    # lint
 ```
-
-### 5. Run migrations (creates all tables)
-```bash
-alembic upgrade head
-```
-
-### 6. Seed the Super Admin + the 3 products
-```bash
-python -m scripts.seed
-```
-This prints the Super Admin login (default `superadmin@shankistea.com` /
-`ChangeMe123!` — **change it after first login**).
-
-### 7. Start the server
-```bash
-uvicorn app.main:app --reload
-```
-
-Open **http://localhost:8000**. Interactive API docs: **/api/docs**.
 
 ---
 
-## Using the app
+## 📖 Full deployment & operations guide
 
-- **Landing page** (`/`) → click **Shop**.
-- **Sign up** as a customer, add blends to cart, **Checkout** → pick a payment
-  method → watch the simulated *Processing → Payment Successful → Order Confirmed*
-  flow (a fake `TXN-...` id is stored).
-- **Account** → order history with a status tracker; review products you've bought.
-- **Super Admin** → log in with the seeded account → **Dashboard**:
-  manage products, advance order status, create Admin/Staff accounts, change roles,
-  activate/deactivate/delete users, and view the **audit log**.
-- Create an **Admin/Staff** account from the Super Admin dashboard to see the
-  reduced-permission view (products + orders only).
+For production deployment, architecture deep-dive, environment variables, reverse-proxy
+/ TLS, backups, scaling, and a troubleshooting runbook, see:
 
-## Key API endpoints (full list at `/api/docs`)
+> 📄 **[DEPLOYMENT.docx](DEPLOYMENT.docx)** (Word) — or the markdown source **[DEPLOYMENT.md](DEPLOYMENT.md)**
 
-```
-POST   /api/auth/signup            register (Customer)         public
-POST   /api/auth/login             JWT login                   public
-GET    /api/auth/me                current user                auth
-POST   /api/auth/password-reset/request | /confirm            public
-GET    /api/products               list/search/filter          public
-POST   /api/products               create product              admin+
-PUT    /api/products/{id}          update product              admin+
-PATCH  /api/products/{id}/stock    set stock                   admin+
-DELETE /api/products/{id}          delete product              admin+
-GET    /api/cart                   view cart                   customer
-POST   /api/cart/items             add to cart                 customer
-POST   /api/auth/change-password   change password (logged in) auth
-POST   /api/orders/checkout        mock-payment checkout       customer
-GET    /api/orders                 my order history            customer
-POST   /api/orders/{id}/cancel     cancel own order (+restock) customer
-PATCH  /api/orders/{id}/status     advance order status        admin+
-GET    /api/products/{pid}/reviews list reviews                public
-POST   /api/products/{pid}/reviews review purchased product    customer
-GET    /api/reviews/mine           my reviews                  customer
-PUT    /api/reviews/{id}           edit own review             customer
-DELETE /api/reviews/{id}           delete own review           customer
-POST   /api/uploads                upload product image        admin+
-GET    /api/users                  all users                   super admin
-POST   /api/users/admins           create admin/staff          super admin
-PATCH  /api/users/{id}/role        promote/demote              super admin
-GET    /api/dashboard/orders       all orders (+customer info) admin+
-GET    /api/dashboard/analytics    sales metrics for charts    admin+
-GET    /api/dashboard/audit-logs   audit log                   super admin
-```
+---
 
-## Tests & lint
-```bash
-cd backend
-pytest
-ruff check .
-```
-
-## Notes for DevOps / deployment
-- Single deployable container serves both the API and the static frontend on port 8000.
-- Runs as a non-root user; `HEALTHCHECK` + `/api/health` (liveness) and
-  `/api/health/db` (readiness) probes included.
-- All secrets via environment (`SECRET_KEY`, DB creds) — never bake `.env` into the image.
-- Order-status transitions are enforced server-side (Placed → Packed → Shipped → Delivered).
-- Stock auto-decrements on checkout; products at/below `LOW_STOCK_THRESHOLD` (default 10)
-  are flagged for admins.
-- The mock payment is intentional — replace `app/services/checkout.py` with a real
-  gateway integration when you go live.
-- **Uploaded product images** are written to `UPLOAD_DIR` (default `/app/uploads` in
-  Docker) and served at `/uploads/<file>`. The `uploads_data` named volume persists
-  them across rebuilds; the image creates the directory owned by the non-root app
-  user so the volume inherits write permission. Cancelling an order restocks its items.
+<div align="center">
+<sub>© 2026 Shankis Tea — Rooted in the hills. · Payment is simulated for demo purposes.</sub>
+</div>

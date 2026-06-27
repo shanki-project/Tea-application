@@ -51,6 +51,43 @@ PRODUCTS = [
     },
 ]
 
+# Additional catalogue — reuses the three product images. Image is chosen by mood:
+#   green/bright -> dawn,  black/spiced -> dusk,  white/calming -> night.
+DAWN_IMG, DUSK_IMG, NIGHT_IMG = "/dawn-product.png", "/dusk-product.png", "/night-product.png"
+
+EXTRA_PRODUCTS = [
+    ("Highland", "Darjeeling first flush — delicate, floral, muscatel.", "Darjeeling. Muscatel notes.", "1180.00", 40, DAWN_IMG, "Green tea"),
+    ("Lotus", "Jasmine-scented green tea, layered overnight with fresh blossoms.", "Green tea. Jasmine.", "990.00", 35, DAWN_IMG, "Green tea"),
+    ("Zen", "Japanese sencha — grassy, clean, quietly energising.", "Sencha. Green tea.", "1120.00", 30, DAWN_IMG, "Green tea"),
+    ("Saffron Noon", "Kashmiri kahwa — saffron, almond and cardamom.", "Green tea. Saffron. Almond. Cardamom.", "1350.00", 18, DAWN_IMG, "Green tea"),
+    ("Golden Hour", "Turmeric-ginger tisane for a warm, golden lift.", "Turmeric. Ginger. Black pepper.", "760.00", 60, DAWN_IMG, "Herbal"),
+    ("Meadow", "Single-note peppermint — cooling and bright.", "Peppermint.", "640.00", 55, DAWN_IMG, "Herbal"),
+    ("Monsoon", "Masala chai — bold black tea and warming spice.", "Black tea. Ginger. Clove. Cinnamon. Cardamom.", "820.00", 50, DUSK_IMG, "Black tea"),
+    ("Silk Road", "Earl Grey with bergamot and a thread of vanilla.", "Black tea. Bergamot. Vanilla.", "980.00", 42, DUSK_IMG, "Black tea"),
+    ("Amber Leaf", "Bold single-estate Assam — malty and full.", "Assam black tea.", "880.00", 48, DUSK_IMG, "Black tea"),
+    ("Cardamom Hills", "Spiced black tea with green cardamom and rose.", "Black tea. Cardamom. Rose.", "940.00", 9, DUSK_IMG, "Black tea"),
+    ("Ember", "Smoked oolong — toasty, deep, lingering.", "Oolong. Smoked notes.", "1240.00", 22, DUSK_IMG, "Oolong"),
+    ("Rosewood", "Hibiscus and rose — tart, ruby and aromatic.", "Hibiscus. Rose. Beetroot.", "720.00", 38, DUSK_IMG, "Herbal"),
+    ("Mist", "White peony (Bai Mu Dan) — soft, sweet, gentle.", "White peony tea.", "1280.00", 16, NIGHT_IMG, "White tea"),
+    ("Frost", "Silver needle — the most delicate of white teas.", "Silver needle white tea.", "1480.00", 8, NIGHT_IMG, "White tea"),
+    ("Midnight", "Lavender and chamomile to ease into sleep.", "Lavender. Chamomile.", "780.00", 44, NIGHT_IMG, "Herbal"),
+    ("Tulsi Calm", "Holy basil tisane — grounding and caffeine-free.", "Tulsi. Holy basil.", "690.00", 52, NIGHT_IMG, "Herbal"),
+    ("Velvet", "Rooibos with vanilla — naturally sweet, no caffeine.", "Rooibos. Vanilla.", "740.00", 47, NIGHT_IMG, "Herbal"),
+]
+
+
+def _extra_dicts():
+    for name, desc, ing, price, stock, img, cat in EXTRA_PRODUCTS:
+        yield {
+            "name": name,
+            "description": desc,
+            "ingredients": ing,
+            "price": Decimal(price),
+            "stock_qty": stock,
+            "image_url": img,
+            "category": cat,
+        }
+
 
 def seed() -> None:
     db = SessionLocal()
@@ -77,8 +114,8 @@ def seed() -> None:
 
         db.flush()
 
-        # Products
-        for p in PRODUCTS:
+        # Products (signature blends + the wider catalogue)
+        for p in [*PRODUCTS, *_extra_dicts()]:
             slug = slugify(p["name"])
             if db.query(Product).filter(Product.slug == slug).first():
                 print(f"  = Product already exists: {p['name']}")
