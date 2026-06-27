@@ -6,15 +6,14 @@ match the running app's configuration.
 
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
-
-from app.core.config import settings
-from app.core.database import Base
 
 # Import models package so every model registers on Base.metadata before
 # autogenerate inspects it.
 import app.models  # noqa: F401
+from alembic import context
+from app.core.config import settings
+from app.core.database import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_uri)
