@@ -23,10 +23,25 @@ class Settings(BaseSettings):
     )
 
     # --- App ---
-    PROJECT_NAME: str = "ASSAM TEA"
+    PROJECT_NAME: str = "Shankis Tea"
     ENVIRONMENT: str = "development"  # development | staging | production
     DEBUG: bool = False
     API_PREFIX: str = "/api"
+
+    # --- Auth / JWT ---
+    # Generate a strong value for production: `openssl rand -hex 32`
+    SECRET_KEY: str = "change-me-dev-secret-not-for-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+
+    # --- Catalog ---
+    LOW_STOCK_THRESHOLD: int = 10  # products at/below this flag as low stock
+
+    # --- Seed (used by scripts/seed.py to create the first Super Admin) ---
+    SUPERADMIN_NAME: str = "Super Admin"
+    SUPERADMIN_EMAIL: str = "superadmin@shankistea.com"
+    SUPERADMIN_PASSWORD: str = "ChangeMe123!"
 
     # Comma-separated list of allowed CORS origins, e.g. "https://assamtea.com,https://www.assamtea.com"
     CORS_ORIGINS: str = "*"

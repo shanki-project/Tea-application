@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Shankis Tea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="auth-wrap card">
+      <h1 class="page-title" style="font-size:36px">Welcome back</h1>
+      <p class="page-sub">Sign in to your ritual</p>
+      <form id="loginForm">
+        <div class="field">
+          <label>Email</label>
+          <input class="input" type="email" name="email" required />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input class="input" type="password" name="password" required />
+        </div>
+        <p class="error note" id="err"></p>
+        <button class="btn solid" type="submit" style="width:100%">Sign In</button>
+      </form>
+      <p class="note muted" style="margin-top:18px">
+        No account? <a href="signup.html">Create one</a><br />
+        <a href="#" id="forgot">Forgot password?</a>
+      </p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, auth } from "./js/api.js";
+    import { mountNav, toast } from "./js/ui.js";
+    mountNav("login");
+
+    const params = new URLSearchParams(location.search);
+    const next = params.get("next");
+
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      document.getElementById("err").textContent = "";
+      try {
+        const { access_token } = await api.login({
+          email: f.email.value,
+          password: f.password.value,
+        });
+        auth.token = access_token;
+        auth.user = await api.me();
+        toast("Signed in");
+        const role = auth.user.role;
+        const dest = next || (role === "customer" ? "shop.html" : "admin.html");
+        setTimeout(() => (window.location.href = dest), 400);
+      } catch (err) {
+        document.getElementById("err").textContent = err.message;
+      }
+    });
+
+    document.getElementById("forgot").addEventListener("click", async (e) => {
+      e.preventDefault();
+      const email = prompt("Enter your account email:");
+      if (!email) return;
+      try {
+        const res = await api.requestReset({ email });
+        // No mail server in this demo — the reset token is returned directly.
+        if (res.reset_token) {
+          const pw = prompt("Reset token received. Enter a NEW password (min 8 chars):");
+          if (!pw) return;
+          await api.confirmReset({ token: res.reset_token, new_password: pw });
+          toast("Password updated — sign in now");
+        } else {
+          toast(res.message || "Check your email");
+        }
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+  </script>
+</body>
+</html>

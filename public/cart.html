@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cart — Shankis Tea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="container">
+    <h1 class="page-title">Your Cart</h1>
+    <p class="page-sub">Review your ritual</p>
+    <div id="cartBody"><p class="muted">Loading…</p></div>
+  </div>
+
+  <script type="module">
+    import { api, auth, money, requireLogin } from "./js/api.js";
+    import { mountNav, toast, refreshCartCount } from "./js/ui.js";
+    mountNav("cart");
+    if (!requireLogin()) throw new Error("redirecting");
+
+    const body = document.getElementById("cartBody");
+
+    async function render() {
+      const cart = await api.cart();
+      if (!cart.items.length) {
+        body.innerHTML = `<p class="muted">Your cart is empty.</p><a class="btn" href="shop.html" style="margin-top:16px">Browse the collection</a>`;
+        return;
+      }
+      body.innerHTML = `
+        <table>
+          <thead><tr><th>Blend</th><th>Price</th><th>Qty</th><th>Line</th><th></th></tr></thead>
+          <tbody>
+            ${cart.items.map((it) => `
+              <tr>
+                <td>${it.product.name}</td>
+                <td>${money(it.product.price)}</td>
+                <td>
+                  <div class="row">
+                    <button class="btn ghost small" data-dec="${it.id}" data-q="${it.quantity}">−</button>
+                    <span>${it.quantity}</span>
+                    <button class="btn ghost small" data-inc="${it.id}" data-q="${it.quantity}">+</button>
+                  </div>
+                </td>
+                <td>${money(it.line_total)}</td>
+                <td><button class="btn ghost small" data-del="${it.id}">Remove</button></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+        <div class="row between" style="margin-top:28px">
+          <button class="btn ghost" id="clear">Clear cart</button>
+          <div style="text-align:right">
+            <div class="muted note">Total (${cart.item_count} items)</div>
+            <div class="serif" style="font-size:30px">${money(cart.total)}</div>
+            <a class="btn solid" href="checkout.html" style="margin-top:12px">Checkout</a>
+          </div>
+        </div>`;
+    }
+
+    body.addEventListener("click", async (e) => {
+      const t = e.target;
+      try {
+        if (t.dataset.del) await api.removeCartItem(Number(t.dataset.del));
+        else if (t.dataset.inc) await api.updateCartItem(Number(t.dataset.inc), { quantity: Number(t.dataset.q) + 1 });
+        else if (t.dataset.dec) {
+          const q = Number(t.dataset.q);
+          if (q <= 1) await api.removeCartItem(Number(t.dataset.dec));
+          else await api.updateCartItem(Number(t.dataset.dec), { quantity: q - 1 });
+        } else if (t.id === "clear") await api.clearCart();
+        else return;
+        await render();
+        refreshCartCount();
+      } catch (err) { toast(err.message, "error"); }
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account — Shankis Tea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="container">
+    <h1 class="page-title">Your Account</h1>
+    <p class="page-sub" id="hello"></p>
+
+    <div class="tabs">
+      <button data-tab="orders" class="active">Orders</button>
+      <button data-tab="profile">Profile</button>
+    </div>
+
+    <div id="orders"></div>
+    <div id="profile" class="hidden"></div>
+  </div>
+
+  <!-- Review modal -->
+  <div id="reviewModal" class="modal-backdrop hidden">
+    <div class="modal" style="text-align:left">
+      <h3 id="reviewTitle">Review</h3>
+      <div class="field">
+        <label>Rating</label>
+        <select class="input" id="rRating">
+          <option value="5">★★★★★ — Excellent</option>
+          <option value="4">★★★★ — Good</option>
+          <option value="3">★★★ — Average</option>
+          <option value="2">★★ — Poor</option>
+          <option value="1">★ — Bad</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Comment</label>
+        <textarea class="input" id="rComment" rows="3"></textarea>
+      </div>
+      <div class="row between">
+        <button class="btn ghost small" id="rCancel">Cancel</button>
+        <button class="btn solid small" id="rSubmit">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, auth, money, requireLogin } from "./js/api.js";
+    import { mountNav, toast } from "./js/ui.js";
+    mountNav("account");
+    if (!requireLogin()) throw new Error("redirecting");
+
+    const STEPS = ["placed", "packed", "shipped", "delivered"];
+    let me;
+
+    function tracker(status) {
+      if (status === "cancelled") return '<span class="badge low">Cancelled</span>';
+      const idx = STEPS.indexOf(status);
+      return `<div class="tracker">${STEPS.map((s, i) => `<div class="step ${i <= idx ? "done" : ""}">${s}</div>`).join("")}</div>`;
+    }
+
+    async function renderOrders() {
+      const orders = await api.myOrders();
+      const el = document.getElementById("orders");
+      if (!orders.length) { el.innerHTML = '<p class="muted">No orders yet. <a href="shop.html">Start your ritual.</a></p>'; return; }
+      el.innerHTML = orders.map((o) => `
+        <div class="card" style="margin-bottom:20px">
+          <div class="row between">
+            <div><strong>Order #${o.id}</strong> <span class="muted note">· ${new Date(o.created_at).toLocaleDateString()}</span></div>
+            <div class="serif" style="font-size:20px">${money(o.total_amount)}</div>
+          </div>
+          <p class="note muted">Txn: ${o.fake_transaction_id || "—"} · Ship to: ${o.shipping_address || "—"}</p>
+          ${tracker(o.status)}
+          <table style="margin-top:14px">
+            <tbody>
+              ${o.items.map((it) => `
+                <tr>
+                  <td>${it.product_name} × ${it.quantity}</td>
+                  <td style="text-align:right">${money(it.price_at_purchase)}</td>
+                  <td style="text-align:right;width:120px">
+                    <button class="btn ghost small" data-review="${it.product_id}" data-name="${it.product_name}">Review</button>
+                  </td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`).join("");
+    }
+
+    async function renderProfile() {
+      const p = await api.getProfile();
+      document.getElementById("profile").innerHTML = `
+        <div class="card" style="max-width:520px">
+          <div class="field"><label>Name</label><input class="input" id="pName" value="${p.name}" /></div>
+          <div class="field"><label>Email</label><input class="input" value="${p.email}" disabled /></div>
+          <div class="field"><label>Saved address</label><textarea class="input" id="pAddr" rows="3">${p.address || ""}</textarea></div>
+          <button class="btn solid" id="saveProfile">Save</button>
+        </div>`;
+      document.getElementById("saveProfile").addEventListener("click", async () => {
+        try {
+          me = await api.updateProfile({ name: document.getElementById("pName").value, address: document.getElementById("pAddr").value });
+          auth.user = me;
+          toast("Profile saved");
+        } catch (e) { toast(e.message, "error"); }
+      });
+    }
+
+    // Tabs
+    document.querySelectorAll(".tabs button").forEach((b) =>
+      b.addEventListener("click", () => {
+        document.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        const tab = b.dataset.tab;
+        document.getElementById("orders").classList.toggle("hidden", tab !== "orders");
+        document.getElementById("profile").classList.toggle("hidden", tab !== "profile");
+      })
+    );
+
+    // Review modal
+    const rm = document.getElementById("reviewModal");
+    let reviewProductId = null;
+    document.getElementById("orders").addEventListener("click", (e) => {
+      if (e.target.dataset.review) {
+        reviewProductId = Number(e.target.dataset.review);
+        document.getElementById("reviewTitle").textContent = "Review " + e.target.dataset.name;
+        rm.classList.remove("hidden");
+      }
+    });
+    document.getElementById("rCancel").addEventListener("click", () => rm.classList.add("hidden"));
+    document.getElementById("rSubmit").addEventListener("click", async () => {
+      try {
+        await api.addReview(reviewProductId, {
+          rating: Number(document.getElementById("rRating").value),
+          comment: document.getElementById("rComment").value,
+        });
+        rm.classList.add("hidden");
+        toast("Thank you for your review");
+        document.getElementById("rComment").value = "";
+      } catch (e) { toast(e.message, "error"); }
+    });
+
+    (async () => {
+      me = auth.user || (await api.me());
+      document.getElementById("hello").textContent = `Welcome, ${me.name}`;
+      await renderOrders();
+      await renderProfile();
+    })();
+  </script>
+</body>
+</html>

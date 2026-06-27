@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up — Shankis Tea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="auth-wrap card">
+      <h1 class="page-title" style="font-size:36px">Begin your ritual</h1>
+      <p class="page-sub">Create a customer account</p>
+      <form id="signupForm">
+        <div class="field">
+          <label>Name</label>
+          <input class="input" name="name" required />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input class="input" type="email" name="email" required />
+        </div>
+        <div class="field">
+          <label>Password (min 8 characters)</label>
+          <input class="input" type="password" name="password" minlength="8" required />
+        </div>
+        <p class="error note" id="err"></p>
+        <button class="btn solid" type="submit" style="width:100%">Create Account</button>
+      </form>
+      <p class="note muted" style="margin-top:18px">
+        Already have an account? <a href="login.html">Sign in</a>
+      </p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, auth } from "./js/api.js";
+    import { mountNav, toast } from "./js/ui.js";
+    mountNav("signup");
+
+    document.getElementById("signupForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      document.getElementById("err").textContent = "";
+      try {
+        const { access_token } = await api.signup({
+          name: f.name.value,
+          email: f.email.value,
+          password: f.password.value,
+        });
+        auth.token = access_token;
+        auth.user = await api.me();
+        toast("Welcome to Shankis Tea");
+        setTimeout(() => (window.location.href = "shop.html"), 500);
+      } catch (err) {
+        document.getElementById("err").textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -14,8 +14,11 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    # Host port for optional external access (e.g. a DB GUI). The backend talks
+    # to MySQL over the internal network, so this isn't required by the app.
+    # Defaults to 3307 to avoid clashing with a local MySQL on 3306.
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - "${MYSQL_HOST_PORT:-3307}:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:

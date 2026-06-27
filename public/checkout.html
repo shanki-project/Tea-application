@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout — Shankis Tea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="container">
+    <h1 class="page-title">Checkout</h1>
+    <p class="page-sub">Review · Address · Payment</p>
+
+    <div id="summary" class="card" style="margin-bottom:24px"><p class="muted">Loading…</p></div>
+
+    <div class="card" id="form" style="max-width:560px">
+      <div class="field">
+        <label>Shipping address</label>
+        <textarea class="input" id="address" rows="3" placeholder="Flat / Street / City / PIN" required></textarea>
+      </div>
+      <div class="field">
+        <label>Payment method (mock — no real charge)</label>
+        <select class="input" id="method">
+          <option value="card">Credit / Debit Card</option>
+          <option value="upi">UPI</option>
+          <option value="netbanking">Net Banking</option>
+          <option value="cod">Cash on Delivery</option>
+        </select>
+      </div>
+      <p class="error note" id="err"></p>
+      <button class="btn solid" id="pay" style="width:100%">Pay & Place Order</button>
+      <p class="note muted" style="margin-top:10px">This is a simulated payment. No card details are collected and no money changes hands.</p>
+    </div>
+  </div>
+
+  <!-- Payment simulation modal -->
+  <div id="modal" class="modal-backdrop hidden">
+    <div class="modal" id="modalBox"></div>
+  </div>
+
+  <script type="module">
+    import { api, money, requireLogin } from "./js/api.js";
+    import { mountNav, refreshCartCount } from "./js/ui.js";
+    mountNav("cart");
+    if (!requireLogin()) throw new Error("redirecting");
+
+    const modal = document.getElementById("modal");
+    const box = document.getElementById("modalBox");
+
+    async function loadSummary() {
+      const cart = await api.cart();
+      const el = document.getElementById("summary");
+      if (!cart.items.length) {
+        el.innerHTML = '<p class="muted">Your cart is empty.</p><a class="btn" href="shop.html">Browse</a>';
+        document.getElementById("form").classList.add("hidden");
+        return;
+      }
+      el.innerHTML = `
+        ${cart.items.map((i) => `<div class="row between"><span>${i.product.name} × ${i.quantity}</span><span>${money(i.line_total)}</span></div>`).join("")}
+        <hr style="border-color:var(--line);margin:14px 0" />
+        <div class="row between"><strong>Total</strong><strong class="serif" style="font-size:24px">${money(cart.total)}</strong></div>`;
+    }
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    document.getElementById("pay").addEventListener("click", async () => {
+      const address = document.getElementById("address").value.trim();
+      const method = document.getElementById("method").value;
+      document.getElementById("err").textContent = "";
+      if (address.length < 5) {
+        document.getElementById("err").textContent = "Please enter a valid shipping address.";
+        return;
+      }
+
+      // Step 1: selecting
+      modal.classList.remove("hidden");
+      box.innerHTML = `<h2 class="serif" style="font-size:28px">Selecting payment method…</h2><p class="muted">${method.toUpperCase()}</p>`;
+      await sleep(800);
+
+      // Step 2: processing (fake 2.5s delay)
+      box.innerHTML = `<h2 class="serif" style="font-size:28px">Processing payment…</h2><div class="spinner"></div><p class="muted">Please do not close this window</p>`;
+      await sleep(2500);
+
+      // Step 3: call backend (creates order + fake transaction id)
+      try {
+        const res = await api.checkout({ shipping_address: address, payment_method: method });
+        refreshCartCount();
+        box.innerHTML = `
+          <div class="check">✓</div>
+          <h2 class="serif" style="font-size:30px;margin:6px 0">Payment Successful</h2>
+          <p class="muted">Transaction: <strong>${res.fake_transaction_id}</strong></p>
+          <p>Order <strong>#${res.order.id}</strong> confirmed · ${money(res.order.total_amount)}</p>
+          <div class="row" style="justify-content:center;margin-top:20px">
+            <a class="btn solid" href="account.html">Track Order</a>
+            <a class="btn ghost" href="shop.html">Keep Shopping</a>
+          </div>`;
+      } catch (err) {
+        box.innerHTML = `
+          <h2 class="serif" style="font-size:28px" class="error">Payment Failed</h2>
+          <p class="error">${err.message}</p>
+          <button class="btn ghost" id="closeModal" style="margin-top:16px">Back</button>`;
+        document.getElementById("closeModal").addEventListener("click", () => modal.classList.add("hidden"));
+      }
+    });
+
+    loadSummary();
+  </script>
+</body>
+</html>

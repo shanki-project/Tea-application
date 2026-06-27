@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Shankis Tea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="container">
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-sub" id="roleSub"></p>
+
+    <div class="grid" id="stats" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:36px"></div>
+
+    <div class="tabs" id="tabs">
+      <button data-tab="products" class="active">Products</button>
+      <button data-tab="orders">Orders</button>
+      <button data-tab="users" class="su-only hidden">Users</button>
+      <button data-tab="audit" class="su-only hidden">Audit Log</button>
+    </div>
+
+    <section id="tab-products">
+      <div class="row between" style="margin-bottom:18px">
+        <h2 style="margin:0">Products</h2>
+        <button class="btn solid small" id="newProduct">+ New Product</button>
+      </div>
+      <div id="productList"></div>
+    </section>
+
+    <section id="tab-orders" class="hidden">
+      <h2>All Orders</h2>
+      <div id="orderList"></div>
+    </section>
+
+    <section id="tab-users" class="hidden">
+      <div class="row between" style="margin-bottom:18px">
+        <h2 style="margin:0">Users</h2>
+        <button class="btn solid small" id="newAdmin">+ New Admin/Staff</button>
+      </div>
+      <div id="userList"></div>
+    </section>
+
+    <section id="tab-audit" class="hidden">
+      <h2>Audit Log</h2>
+      <div id="auditList"></div>
+    </section>
+  </div>
+
+  <!-- Product editor modal -->
+  <div id="pModal" class="modal-backdrop hidden">
+    <div class="modal" style="text-align:left;max-height:88vh;overflow:auto">
+      <h3 id="pTitle">Product</h3>
+      <input type="hidden" id="pId" />
+      <div class="field"><label>Name</label><input class="input" id="pName" /></div>
+      <div class="field"><label>Category</label><input class="input" id="pCategory" /></div>
+      <div class="field"><label>Price (₹)</label><input class="input" id="pPrice" type="number" step="0.01" /></div>
+      <div class="field"><label>Stock</label><input class="input" id="pStock" type="number" /></div>
+      <div class="field"><label>Image URL</label><input class="input" id="pImage" placeholder="/dawn-product.png" /></div>
+      <div class="field"><label>Ingredients</label><input class="input" id="pIngredients" /></div>
+      <div class="field"><label>Description</label><textarea class="input" id="pDesc" rows="3"></textarea></div>
+      <div class="row between">
+        <button class="btn ghost small" id="pCancel">Cancel</button>
+        <button class="btn solid small" id="pSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin creator modal -->
+  <div id="aModal" class="modal-backdrop hidden">
+    <div class="modal" style="text-align:left">
+      <h3>New Admin / Staff</h3>
+      <div class="field"><label>Name</label><input class="input" id="aName" /></div>
+      <div class="field"><label>Email</label><input class="input" id="aEmail" type="email" /></div>
+      <div class="field"><label>Password</label><input class="input" id="aPass" type="password" /></div>
+      <div class="field"><label>Role</label>
+        <select class="input" id="aRole">
+          <option value="admin">Admin / Staff</option>
+          <option value="super_admin">Super Admin</option>
+        </select>
+      </div>
+      <div class="row between">
+        <button class="btn ghost small" id="aCancel">Cancel</button>
+        <button class="btn solid small" id="aSave">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, auth, money, requireLogin } from "./js/api.js";
+    import { mountNav, toast } from "./js/ui.js";
+    mountNav("admin");
+    if (!requireLogin()) throw new Error("redirecting");
+
+    let me = auth.user;
+    const STATUSES = ["placed", "packed", "shipped", "delivered", "cancelled"];
+
+    (async () => {
+      me = await api.me().catch(() => null);
+      if (!me || !["admin", "super_admin"].includes(me.role)) {
+        toast("Staff access only", "error");
+        setTimeout(() => (window.location.href = "/"), 800);
+        return;
+      }
+      auth.user = me;
+      const isSuper = me.role === "super_admin";
+      document.getElementById("roleSub").textContent = isSuper ? "Super Admin" : "Admin / Staff";
+      if (isSuper) document.querySelectorAll(".su-only").forEach((e) => e.classList.remove("hidden"));
+
+      await loadStats();
+      await loadProducts();
+      await loadOrders();
+      if (isSuper) { await loadUsers(); await loadAudit(); }
+    })();
+
+    // ----- Tabs -----
+    document.querySelectorAll("#tabs button").forEach((b) =>
+      b.addEventListener("click", () => {
+        document.querySelectorAll("#tabs button").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        ["products", "orders", "users", "audit"].forEach((t) =>
+          document.getElementById("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab)
+        );
+      })
+    );
+
+    async function loadStats() {
+      const s = await api.dashboardSummary();
+      const cards = [];
+      if (s.product_count != null) cards.push(["Products", s.product_count]);
+      if (s.order_count != null) cards.push(["Orders", s.order_count]);
+      if (s.low_stock_count != null) cards.push(["Low stock", s.low_stock_count]);
+      if (s.user_count != null) cards.push(["Users", s.user_count]);
+      if (s.revenue != null) cards.push(["Revenue", money(s.revenue)]);
+      document.getElementById("stats").innerHTML = cards
+        .map(([k, v]) => `<div class="card"><div class="muted note">${k}</div><div class="serif" style="font-size:30px">${v}</div></div>`)
+        .join("");
+    }
+
+    // ----- Products -----
+    async function loadProducts() {
+      const products = await api.inventory();
+      document.getElementById("productList").innerHTML = `
+        <table>
+          <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th></th></tr></thead>
+          <tbody>${products.map((p) => `
+            <tr>
+              <td>${p.name}</td>
+              <td class="muted">${p.category || "—"}</td>
+              <td>${money(p.price)}</td>
+              <td>${p.stock_qty} ${p.is_low_stock ? '<span class="badge low">low</span>' : ""}</td>
+              <td style="text-align:right">
+                <button class="btn ghost small" data-edit='${JSON.stringify(p).replace(/'/g, "&#39;")}'>Edit</button>
+                <button class="btn ghost small" data-del="${p.id}">Delete</button>
+              </td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+    }
+
+    const pModal = document.getElementById("pModal");
+    function openProduct(p) {
+      document.getElementById("pTitle").textContent = p ? "Edit Product" : "New Product";
+      document.getElementById("pId").value = p?.id || "";
+      document.getElementById("pName").value = p?.name || "";
+      document.getElementById("pCategory").value = p?.category || "";
+      document.getElementById("pPrice").value = p?.price || "";
+      document.getElementById("pStock").value = p?.stock_qty ?? "";
+      document.getElementById("pImage").value = p?.image_url || "";
+      document.getElementById("pIngredients").value = p?.ingredients || "";
+      document.getElementById("pDesc").value = p?.description || "";
+      pModal.classList.remove("hidden");
+    }
+    document.getElementById("newProduct").addEventListener("click", () => openProduct(null));
+    document.getElementById("pCancel").addEventListener("click", () => pModal.classList.add("hidden"));
+    document.getElementById("productList").addEventListener("click", async (e) => {
+      if (e.target.dataset.edit) openProduct(JSON.parse(e.target.dataset.edit.replace(/&#39;/g, "'")));
+      if (e.target.dataset.del) {
+        if (!confirm("Delete this product?")) return;
+        try { await api.deleteProduct(Number(e.target.dataset.del)); toast("Deleted"); loadProducts(); loadStats(); }
+        catch (err) { toast(err.message, "error"); }
+      }
+    });
+    document.getElementById("pSave").addEventListener("click", async () => {
+      const id = document.getElementById("pId").value;
+      const payload = {
+        name: document.getElementById("pName").value,
+        category: document.getElementById("pCategory").value,
+        price: Number(document.getElementById("pPrice").value),
+        stock_qty: Number(document.getElementById("pStock").value),
+        image_url: document.getElementById("pImage").value,
+        ingredients: document.getElementById("pIngredients").value,
+        description: document.getElementById("pDesc").value,
+      };
+      try {
+        if (id) await api.updateProduct(Number(id), payload);
+        else await api.createProduct(payload);
+        pModal.classList.add("hidden");
+        toast("Saved");
+        loadProducts(); loadStats();
+      } catch (err) { toast(err.message, "error"); }
+    });
+
+    // ----- Orders -----
+    async function loadOrders() {
+      const orders = await api.allOrders();
+      document.getElementById("orderList").innerHTML = `
+        <table>
+          <thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Status</th><th>Update</th></tr></thead>
+          <tbody>${orders.map((o) => `
+            <tr>
+              <td>${o.id}</td>
+              <td class="muted">user ${o.user_id}</td>
+              <td>${money(o.total_amount)}</td>
+              <td><span class="tag">${o.status}</span></td>
+              <td>
+                <select class="input" style="width:auto;padding:6px 10px" data-status="${o.id}">
+                  ${STATUSES.map((s) => `<option value="${s}" ${s === o.status ? "selected" : ""}>${s}</option>`).join("")}
+                </select>
+              </td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+    }
+    document.getElementById("orderList").addEventListener("change", async (e) => {
+      const id = e.target.dataset.status;
+      if (!id) return;
+      try { await api.updateOrderStatus(Number(id), { status: e.target.value }); toast("Status updated"); loadOrders(); }
+      catch (err) { toast(err.message, "error"); loadOrders(); }
+    });
+
+    // ----- Users (super admin) -----
+    async function loadUsers() {
+      const users = await api.users();
+      document.getElementById("userList").innerHTML = `
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${users.map((u) => `
+            <tr>
+              <td>${u.name}</td>
+              <td class="muted">${u.email}</td>
+              <td>
+                <select class="input" style="width:auto;padding:6px 10px" data-role="${u.id}" ${u.id === me.id ? "disabled" : ""}>
+                  ${["customer", "admin", "super_admin"].map((r) => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r}</option>`).join("")}
+                </select>
+              </td>
+              <td>${u.is_active ? '<span class="badge ok">active</span>' : '<span class="badge low">inactive</span>'}</td>
+              <td style="text-align:right">
+                ${u.id === me.id ? '<span class="muted note">you</span>' :
+                  `${u.is_active ? `<button class="btn ghost small" data-deact="${u.id}">Deactivate</button>` : `<button class="btn ghost small" data-act="${u.id}">Activate</button>`}
+                   <button class="btn ghost small" data-deluser="${u.id}">Delete</button>`}
+              </td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+    }
+    document.getElementById("userList").addEventListener("click", async (e) => {
+      const t = e.target;
+      try {
+        if (t.dataset.deact) await api.deactivateUser(Number(t.dataset.deact));
+        else if (t.dataset.act) await api.activateUser(Number(t.dataset.act));
+        else if (t.dataset.deluser) { if (!confirm("Delete this user?")) return; await api.deleteUser(Number(t.dataset.deluser)); }
+        else return;
+        toast("Done"); loadUsers(); loadStats();
+      } catch (err) { toast(err.message, "error"); }
+    });
+    document.getElementById("userList").addEventListener("change", async (e) => {
+      if (!e.target.dataset.role) return;
+      try { await api.setRole(Number(e.target.dataset.role), { role: e.target.value }); toast("Role updated"); loadUsers(); }
+      catch (err) { toast(err.message, "error"); loadUsers(); }
+    });
+
+    const aModal = document.getElementById("aModal");
+    document.getElementById("newAdmin").addEventListener("click", () => aModal.classList.remove("hidden"));
+    document.getElementById("aCancel").addEventListener("click", () => aModal.classList.add("hidden"));
+    document.getElementById("aSave").addEventListener("click", async () => {
+      try {
+        await api.createAdmin({
+          name: document.getElementById("aName").value,
+          email: document.getElementById("aEmail").value,
+          password: document.getElementById("aPass").value,
+          role: document.getElementById("aRole").value,
+        });
+        aModal.classList.add("hidden");
+        toast("Account created"); loadUsers(); loadStats();
+      } catch (err) { toast(err.message, "error"); }
+    });
+
+    // ----- Audit (super admin) -----
+    async function loadAudit() {
+      const logs = await api.auditLogs();
+      document.getElementById("auditList").innerHTML = `
+        <table>
+          <thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Target</th></tr></thead>
+          <tbody>${logs.map((l) => `
+            <tr>
+              <td class="muted note">${new Date(l.timestamp).toLocaleString()}</td>
+              <td>${l.admin_name || "—"}</td>
+              <td>${l.action}</td>
+              <td class="muted">${l.target_table || ""} ${l.target_id ? "#" + l.target_id : ""}</td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+    }
+  </script>
+</body>
+</html>

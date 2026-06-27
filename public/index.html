@@ -649,9 +649,26 @@
 
   <!-- FIXED HEADER -->
   <header id="site-header">
-    <div id="header-logo">Assam Tea</div>
-    <a id="header-shop" href="#collection">Shop</a>
+    <div id="header-logo">Shankis Tea</div>
+    <nav style="display:flex; gap:22px; align-items:center;">
+      <a id="header-shop" href="shop.html">Shop</a>
+      <a id="header-account" href="login.html" style="font-family:'Inter',sans-serif; font-size:11px; font-weight:300; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.6);">Login</a>
+    </nav>
   </header>
+  <script type="module">
+    // Swap the header link based on auth state.
+    import { auth } from "./js/api.js";
+    const a = document.getElementById("header-account");
+    if (auth.isLoggedIn && a) {
+      const role = auth.user?.role;
+      a.textContent = role === "customer" ? "Account" : "Dashboard";
+      a.href = role === "customer" ? "account.html" : "admin.html";
+    }
+    // Landing "Add to Ritual" buttons lead to the live shop.
+    document.querySelectorAll(".card-btn").forEach((b) => {
+      b.addEventListener("click", () => (window.location.href = "shop.html"));
+    });
+  </script>
 
   <!-- SCROLL PROGRESS BAR -->
   <div id="scroll-progress">
