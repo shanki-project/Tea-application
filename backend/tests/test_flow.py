@@ -113,6 +113,93 @@ def test_review_requires_purchase(client, super_admin):
     assert r.status_code == 403  # never purchased
 
 
+def test_order_cancel_restocks(client, super_admin):
+    admin_h = auth_header(client, "root@shankistea.com", "password123")
+    prod = client.post(
+        "/api/products", json={"name": "Dawn", "price": 890, "stock_qty": 10},
+        headers=admin_h,
+    ).json()
+    cust_h = _signup(client, "Cara", "cara@x.com")
+    client.post("/api/cart/items", json={"product_id": prod["id"], "quantity": 4}, headers=cust_h)
+    order = client.post(
+        "/api/orders/checkout",
+        json={"shipping_address": "12 Tea Lane", "payment_method": "card"},
+        headers=cust_h,
+    ).json()["order"]
+    assert client.get("/api/products/dawn").json()["stock_qty"] == 6  # 10-4
+
+    # customer cancels -> restocked back to 10
+    r = client.post(f"/api/orders/{order['id']}/cancel", headers=cust_h)
+    assert r.status_code == 200 and r.json()["status"] == "cancelled"
+    assert client.get("/api/products/dawn").json()["stock_qty"] == 10
+
+
+def test_change_password(client):
+    h = _signup(client, "Cara", "cara@x.com")
+    bad = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "wrong", "new_password": "newpassword123"},
+        headers=h,
+    )
+    assert bad.status_code == 400
+    ok = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "password123", "new_password": "newpassword123"},
+        headers=h,
+    )
+    assert ok.status_code == 200
+    assert auth_header(client, "cara@x.com", "newpassword123")  # new password works
+
+
+def test_my_reviews_edit_delete(client, super_admin):
+    admin_h = auth_header(client, "root@shankistea.com", "password123")
+    pid = client.post(
+        "/api/products", json={"name": "Dusk", "price": 950, "stock_qty": 5},
+        headers=admin_h,
+    ).json()["id"]
+    cust_h = _signup(client, "Cara", "cara@x.com")
+    client.post("/api/cart/items", json={"product_id": pid, "quantity": 1}, headers=cust_h)
+    client.post(
+        "/api/orders/checkout",
+        json={"shipping_address": "12 Tea Lane", "payment_method": "card"},
+        headers=cust_h,
+    )
+    rev = client.post(
+        f"/api/products/{pid}/reviews", json={"rating": 4, "comment": "good"}, headers=cust_h
+    ).json()
+    mine = client.get("/api/reviews/mine", headers=cust_h).json()
+    assert len(mine) == 1 and mine[0]["product_name"] == "Dusk"
+    # edit
+    up = client.put(f"/api/reviews/{rev['id']}", json={"rating": 2}, headers=cust_h)
+    assert up.status_code == 200 and up.json()["rating"] == 2
+    # delete
+    assert client.delete(f"/api/reviews/{rev['id']}", headers=cust_h).status_code == 204
+    assert client.get("/api/reviews/mine", headers=cust_h).json() == []
+
+
+def test_admin_sees_customer_and_analytics(client, super_admin):
+    admin_h = auth_header(client, "root@shankistea.com", "password123")
+    pid = client.post(
+        "/api/products", json={"name": "Night", "price": 1050, "stock_qty": 9},
+        headers=admin_h,
+    ).json()["id"]
+    cust_h = _signup(client, "Cara Mia", "cara@x.com")
+    client.post("/api/cart/items", json={"product_id": pid, "quantity": 2}, headers=cust_h)
+    client.post(
+        "/api/orders/checkout",
+        json={"shipping_address": "12 Tea Lane", "payment_method": "card"},
+        headers=cust_h,
+    )
+    orders = client.get("/api/dashboard/orders", headers=admin_h).json()
+    assert orders[0]["customer_name"] == "Cara Mia"
+    assert orders[0]["customer_email"] == "cara@x.com"
+
+    a = client.get("/api/dashboard/analytics", headers=admin_h).json()
+    assert a["revenue"] == 2100.0
+    assert a["top_products"][0]["name"] == "Night"
+    assert a["top_products"][0]["qty"] == 2
+
+
 def test_super_admin_manages_accounts_and_audit(client, super_admin):
     admin_h = auth_header(client, "root@shankistea.com", "password123")
 

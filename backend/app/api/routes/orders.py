@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_admin, require_customer
 from app.crud import order as order_crud
-from app.models.enums import ORDER_STATUS_FLOW, UserRole
+from app.models.enums import ORDER_STATUS_FLOW, OrderStatus, UserRole
 from app.models.order import Order
 from app.models.user import User
 from app.schemas.order import (
@@ -27,6 +27,8 @@ def _to_read(order: Order) -> OrderRead:
         fake_transaction_id=order.fake_transaction_id,
         shipping_address=order.shipping_address,
         created_at=order.created_at,
+        customer_name=order.user.name if order.user else None,
+        customer_email=order.user.email if order.user else None,
         items=[
             {
                 "id": i.id,
@@ -38,6 +40,13 @@ def _to_read(order: Order) -> OrderRead:
             for i in order.items
         ],
     )
+
+
+def _restock(order: Order) -> None:
+    """Return items to inventory (used when an order is cancelled)."""
+    for item in order.items:
+        if item.product is not None:
+            item.product.stock_qty += item.quantity
 
 
 @router.post("/checkout", response_model=CheckoutResult, status_code=status.HTTP_201_CREATED)
@@ -98,11 +107,36 @@ def update_status(
             status.HTTP_400_BAD_REQUEST,
             f"Cannot move order from {order.status.value} to {payload.status.value}.",
         )
+    if payload.status == OrderStatus.cancelled and order.status != OrderStatus.cancelled:
+        _restock(order)
     order.status = payload.status
     log_action(
         db, admin_id=admin.id, action=f"order_status:{payload.status.value}",
         target_table="orders", target_id=order.id,
     )
+    db.commit()
+    db.refresh(order)
+    return _to_read(order)
+
+
+@router.post("/{order_id}/cancel", response_model=OrderRead)
+def cancel_my_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_customer),
+):
+    """A customer cancels their own order while it is still Placed or Packed.
+    Cancelled orders return their items to stock."""
+    order = order_crud.get(db, order_id)
+    if not order or order.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found.")
+    if order.status not in (OrderStatus.placed, OrderStatus.packed):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"An order that is {order.status.value} can no longer be cancelled.",
+        )
+    _restock(order)
+    order.status = OrderStatus.cancelled
     db.commit()
     db.refresh(order)
     return _to_read(order)

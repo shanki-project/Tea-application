@@ -26,6 +26,16 @@ def get_user_review(db: Session, user_id: int, product_id: int) -> Review | None
     )
 
 
+def list_for_user(db: Session, user_id: int) -> list[Review]:
+    stmt = (
+        select(Review)
+        .where(Review.user_id == user_id)
+        .options(joinedload(Review.product))
+        .order_by(Review.created_at.desc())
+    )
+    return list(db.scalars(stmt).all())
+
+
 def create(
     db: Session, *, user_id: int, product_id: int, rating: int, comment: str | None
 ) -> Review:

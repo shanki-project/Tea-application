@@ -32,6 +32,8 @@ class OrderRead(BaseModel):
     shipping_address: str | None = None
     created_at: datetime
     items: list[OrderItemRead] = []
+    customer_name: str | None = None
+    customer_email: str | None = None
 
 
 class OrderStatusUpdate(BaseModel):

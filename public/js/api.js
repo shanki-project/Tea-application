@@ -54,6 +54,7 @@ export const api = {
   me: () => request("GET", "/auth/me", undefined, { authed: true }),
   requestReset: (d) => request("POST", "/auth/password-reset/request", d),
   confirmReset: (d) => request("POST", "/auth/password-reset/confirm", d),
+  changePassword: (d) => request("POST", "/auth/change-password", d, { authed: true }),
 
   // profile
   getProfile: () => request("GET", "/users/me", undefined, { authed: true }),
@@ -81,9 +82,11 @@ export const api = {
   order: (id) => request("GET", `/orders/${id}`, undefined, { authed: true }),
   updateOrderStatus: (id, d) =>
     request("PATCH", `/orders/${id}/status`, d, { authed: true }),
+  cancelOrder: (id) => request("POST", `/orders/${id}/cancel`, {}, { authed: true }),
 
   // reviews
   reviews: (productId) => request("GET", `/products/${productId}/reviews`),
+  myReviews: () => request("GET", "/reviews/mine", undefined, { authed: true }),
   addReview: (productId, d) =>
     request("POST", `/products/${productId}/reviews`, d, { authed: true }),
   updateReview: (id, d) => request("PUT", `/reviews/${id}`, d, { authed: true }),
@@ -94,6 +97,21 @@ export const api = {
   allOrders: () => request("GET", "/dashboard/orders", undefined, { authed: true }),
   inventory: () => request("GET", "/dashboard/inventory", undefined, { authed: true }),
   auditLogs: () => request("GET", "/dashboard/audit-logs", undefined, { authed: true }),
+  analytics: () => request("GET", "/dashboard/analytics", undefined, { authed: true }),
+
+  // image upload (multipart)
+  uploadImage: async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(API_BASE + "/uploads", {
+      method: "POST",
+      headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Upload failed");
+    return data; // { url, filename }
+  },
 
   // users (super admin)
   users: () => request("GET", "/users", undefined, { authed: true }),

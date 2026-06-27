@@ -15,7 +15,7 @@ from app.schemas.review import ReviewCreate, ReviewRead, ReviewUpdate
 router = APIRouter()
 
 
-def _to_read(review) -> ReviewRead:
+def _to_read(review, *, with_product: bool = False) -> ReviewRead:
     return ReviewRead(
         id=review.id,
         user_id=review.user_id,
@@ -24,12 +24,24 @@ def _to_read(review) -> ReviewRead:
         comment=review.comment,
         created_at=review.created_at,
         user_name=review.user.name if review.user else None,
+        product_name=(review.product.name if with_product and review.product else None),
     )
 
 
 @router.get("/products/{product_id}/reviews", response_model=list[ReviewRead])
 def list_reviews(product_id: int, db: Session = Depends(get_db)):
     return [_to_read(r) for r in review_crud.list_for_product(db, product_id)]
+
+
+@router.get("/reviews/mine", response_model=list[ReviewRead])
+def my_reviews(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return [
+        _to_read(r, with_product=True)
+        for r in review_crud.list_for_user(db, current_user.id)
+    ]
 
 
 @router.post(

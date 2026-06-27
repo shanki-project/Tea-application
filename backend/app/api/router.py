@@ -10,6 +10,7 @@ from app.api.routes import (
     orders,
     products,
     reviews,
+    uploads,
     users,
 )
 
@@ -22,3 +23,4 @@ api_router.include_router(reviews.router, tags=["reviews"])  # paths are absolut
 api_router.include_router(cart.router, prefix="/cart", tags=["cart"])
 api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])

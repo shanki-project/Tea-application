@@ -172,15 +172,22 @@ PATCH  /api/products/{id}/stock    set stock                   admin+
 DELETE /api/products/{id}          delete product              admin+
 GET    /api/cart                   view cart                   customer
 POST   /api/cart/items             add to cart                 customer
+POST   /api/auth/change-password   change password (logged in) auth
 POST   /api/orders/checkout        mock-payment checkout       customer
 GET    /api/orders                 my order history            customer
+POST   /api/orders/{id}/cancel     cancel own order (+restock) customer
 PATCH  /api/orders/{id}/status     advance order status        admin+
 GET    /api/products/{pid}/reviews list reviews                public
 POST   /api/products/{pid}/reviews review purchased product    customer
+GET    /api/reviews/mine           my reviews                  customer
+PUT    /api/reviews/{id}           edit own review             customer
+DELETE /api/reviews/{id}           delete own review           customer
+POST   /api/uploads                upload product image        admin+
 GET    /api/users                  all users                   super admin
 POST   /api/users/admins           create admin/staff          super admin
 PATCH  /api/users/{id}/role        promote/demote              super admin
-GET    /api/dashboard/orders       all orders                  admin+
+GET    /api/dashboard/orders       all orders (+customer info) admin+
+GET    /api/dashboard/analytics    sales metrics for charts    admin+
 GET    /api/dashboard/audit-logs   audit log                   super admin
 ```
 
@@ -201,3 +208,7 @@ ruff check .
   are flagged for admins.
 - The mock payment is intentional — replace `app/services/checkout.py` with a real
   gateway integration when you go live.
+- **Uploaded product images** are written to `UPLOAD_DIR` (default `/app/uploads` in
+  Docker) and served at `/uploads/<file>`. The `uploads_data` named volume persists
+  them across rebuilds; the image creates the directory owned by the non-root app
+  user so the volume inherits write permission. Cancelling an order restocks its items.

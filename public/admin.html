@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -16,13 +17,23 @@
     <div class="grid" id="stats" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:36px"></div>
 
     <div class="tabs" id="tabs">
-      <button data-tab="products" class="active">Products</button>
+      <button data-tab="analytics" class="active">Analytics</button>
+      <button data-tab="products">Products</button>
+      <button data-tab="inventory">Inventory</button>
       <button data-tab="orders">Orders</button>
       <button data-tab="users" class="su-only hidden">Users</button>
       <button data-tab="audit" class="su-only hidden">Audit Log</button>
     </div>
 
-    <section id="tab-products">
+    <section id="tab-analytics">
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+        <div class="card"><h3 style="margin-top:0">Revenue over time</h3><canvas id="chartRevenue" height="180"></canvas></div>
+        <div class="card"><h3 style="margin-top:0">Orders by status</h3><canvas id="chartStatus" height="180"></canvas></div>
+        <div class="card"><h3 style="margin-top:0">Top products (units sold)</h3><canvas id="chartTop" height="180"></canvas></div>
+      </div>
+    </section>
+
+    <section id="tab-products" class="hidden">
       <div class="row between" style="margin-bottom:18px">
         <h2 style="margin:0">Products</h2>
         <button class="btn solid small" id="newProduct">+ New Product</button>
@@ -30,8 +41,17 @@
       <div id="productList"></div>
     </section>
 
+    <section id="tab-inventory" class="hidden">
+      <h2>Inventory & Stock</h2>
+      <p class="muted note">Low-stock items are flagged. Update a count and click Save.</p>
+      <div id="inventoryList"></div>
+    </section>
+
     <section id="tab-orders" class="hidden">
-      <h2>All Orders</h2>
+      <div class="row between" style="margin-bottom:18px">
+        <h2 style="margin:0">All Orders</h2>
+        <button class="btn ghost small" id="exportOrders">Export CSV</button>
+      </div>
       <div id="orderList"></div>
     </section>
 
@@ -58,13 +78,29 @@
       <div class="field"><label>Category</label><input class="input" id="pCategory" /></div>
       <div class="field"><label>Price (₹)</label><input class="input" id="pPrice" type="number" step="0.01" /></div>
       <div class="field"><label>Stock</label><input class="input" id="pStock" type="number" /></div>
-      <div class="field"><label>Image URL</label><input class="input" id="pImage" placeholder="/dawn-product.png" /></div>
+      <div class="field">
+        <label>Product image</label>
+        <input class="input" id="pImageFile" type="file" accept="image/*" />
+        <div class="row" style="margin-top:8px">
+          <img id="pImagePreview" src="" alt="" style="height:54px;display:none;border:1px solid var(--line)" />
+          <input class="input" id="pImage" placeholder="or paste an image URL / path" />
+        </div>
+        <p class="note muted" id="uploadStatus"></p>
+      </div>
       <div class="field"><label>Ingredients</label><input class="input" id="pIngredients" /></div>
       <div class="field"><label>Description</label><textarea class="input" id="pDesc" rows="3"></textarea></div>
       <div class="row between">
         <button class="btn ghost small" id="pCancel">Cancel</button>
         <button class="btn solid small" id="pSave">Save</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Order detail modal -->
+  <div id="oModal" class="modal-backdrop hidden">
+    <div class="modal" style="text-align:left;max-height:88vh;overflow:auto">
+      <div id="oBody"></div>
+      <button class="btn ghost small" id="oClose" style="margin-top:16px">Close</button>
     </div>
   </div>
 
@@ -95,6 +131,8 @@
     if (!requireLogin()) throw new Error("redirecting");
 
     let me = auth.user;
+    let ordersCache = [];
+    const charts = {};
     const STATUSES = ["placed", "packed", "shipped", "delivered", "cancelled"];
 
     (async () => {
@@ -110,7 +148,9 @@
       if (isSuper) document.querySelectorAll(".su-only").forEach((e) => e.classList.remove("hidden"));
 
       await loadStats();
+      await loadAnalytics();
       await loadProducts();
+      await loadInventory();
       await loadOrders();
       if (isSuper) { await loadUsers(); await loadAudit(); }
     })();
@@ -120,7 +160,7 @@
       b.addEventListener("click", () => {
         document.querySelectorAll("#tabs button").forEach((x) => x.classList.remove("active"));
         b.classList.add("active");
-        ["products", "orders", "users", "audit"].forEach((t) =>
+        ["analytics", "products", "inventory", "orders", "users", "audit"].forEach((t) =>
           document.getElementById("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab)
         );
       })
@@ -139,20 +179,50 @@
         .join("");
     }
 
+    // ----- Analytics charts -----
+    const AMBER = "#c9a96a", GRID = "rgba(150,140,120,.15)", TXT = "#9a8f7d";
+    Chart.defaults.color = TXT;
+    Chart.defaults.borderColor = GRID;
+    Chart.defaults.font.family = "Inter, sans-serif";
+
+    async function loadAnalytics() {
+      const a = await api.analytics();
+      mkChart("chartRevenue", "line", {
+        labels: a.revenue_by_day.map((d) => d.day),
+        datasets: [{ label: "Revenue", data: a.revenue_by_day.map((d) => d.revenue), borderColor: AMBER, backgroundColor: "rgba(201,169,106,.15)", fill: true, tension: 0.3 }],
+      });
+      mkChart("chartStatus", "doughnut", {
+        labels: Object.keys(a.by_status),
+        datasets: [{ data: Object.values(a.by_status), backgroundColor: ["#c9a96a", "#d8be8c", "#7fa66a", "#6a8fc9", "#c97a6a"] }],
+      });
+      mkChart("chartTop", "bar", {
+        labels: a.top_products.map((p) => p.name),
+        datasets: [{ label: "Units sold", data: a.top_products.map((p) => p.qty), backgroundColor: AMBER }],
+      });
+    }
+    function mkChart(id, type, data) {
+      if (charts[id]) charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type, data,
+        options: { plugins: { legend: { display: type !== "bar" && type !== "line" } }, scales: type === "doughnut" ? {} : { y: { beginAtZero: true } } },
+      });
+    }
+
     // ----- Products -----
     async function loadProducts() {
       const products = await api.inventory();
       document.getElementById("productList").innerHTML = `
         <table>
-          <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th></th></tr></thead>
+          <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th></th></tr></thead>
           <tbody>${products.map((p) => `
             <tr>
+              <td>${p.image_url ? `<img src="${p.image_url}" style="height:36px;width:36px;object-fit:cover;border:1px solid var(--line)" />` : "—"}</td>
               <td>${p.name}</td>
               <td class="muted">${p.category || "—"}</td>
               <td>${money(p.price)}</td>
               <td>${p.stock_qty} ${p.is_low_stock ? '<span class="badge low">low</span>' : ""}</td>
               <td style="text-align:right">
-                <button class="btn ghost small" data-edit='${JSON.stringify(p).replace(/'/g, "&#39;")}'>Edit</button>
+                <button class="btn ghost small" data-edit='${encodeURIComponent(JSON.stringify(p))}'>Edit</button>
                 <button class="btn ghost small" data-del="${p.id}">Delete</button>
               </td>
             </tr>`).join("")}</tbody>
@@ -170,15 +240,35 @@
       document.getElementById("pImage").value = p?.image_url || "";
       document.getElementById("pIngredients").value = p?.ingredients || "";
       document.getElementById("pDesc").value = p?.description || "";
+      document.getElementById("pImageFile").value = "";
+      document.getElementById("uploadStatus").textContent = "";
+      const prev = document.getElementById("pImagePreview");
+      if (p?.image_url) { prev.src = p.image_url; prev.style.display = "block"; } else { prev.style.display = "none"; }
       pModal.classList.remove("hidden");
     }
     document.getElementById("newProduct").addEventListener("click", () => openProduct(null));
     document.getElementById("pCancel").addEventListener("click", () => pModal.classList.add("hidden"));
+
+    // Image upload
+    document.getElementById("pImageFile").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const st = document.getElementById("uploadStatus");
+      st.textContent = "Uploading…";
+      try {
+        const { url } = await api.uploadImage(file);
+        document.getElementById("pImage").value = url;
+        const prev = document.getElementById("pImagePreview");
+        prev.src = url; prev.style.display = "block";
+        st.textContent = "Uploaded ✓";
+      } catch (err) { st.textContent = ""; toast(err.message, "error"); }
+    });
+
     document.getElementById("productList").addEventListener("click", async (e) => {
-      if (e.target.dataset.edit) openProduct(JSON.parse(e.target.dataset.edit.replace(/&#39;/g, "'")));
+      if (e.target.dataset.edit) openProduct(JSON.parse(decodeURIComponent(e.target.dataset.edit)));
       if (e.target.dataset.del) {
         if (!confirm("Delete this product?")) return;
-        try { await api.deleteProduct(Number(e.target.dataset.del)); toast("Deleted"); loadProducts(); loadStats(); }
+        try { await api.deleteProduct(Number(e.target.dataset.del)); toast("Deleted"); await refreshCatalog(); }
         catch (err) { toast(err.message, "error"); }
       }
     });
@@ -198,20 +288,48 @@
         else await api.createProduct(payload);
         pModal.classList.add("hidden");
         toast("Saved");
-        loadProducts(); loadStats();
+        await refreshCatalog();
       } catch (err) { toast(err.message, "error"); }
     });
 
+    // ----- Inventory -----
+    async function loadInventory() {
+      const products = await api.inventory();
+      const sorted = [...products].sort((a, b) => a.stock_qty - b.stock_qty);
+      document.getElementById("inventoryList").innerHTML = `
+        <table>
+          <thead><tr><th>Product</th><th>Current stock</th><th>New count</th><th></th></tr></thead>
+          <tbody>${sorted.map((p) => `
+            <tr>
+              <td>${p.name} ${p.is_low_stock ? '<span class="badge low">low</span>' : '<span class="badge ok">ok</span>'}</td>
+              <td>${p.stock_qty}</td>
+              <td><input class="input" style="width:100px;padding:6px 10px" type="number" min="0" value="${p.stock_qty}" data-stock="${p.id}" /></td>
+              <td><button class="btn ghost small" data-savestock="${p.id}">Save</button></td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+    }
+    document.getElementById("inventoryList").addEventListener("click", async (e) => {
+      const id = e.target.dataset.savestock;
+      if (!id) return;
+      const val = Number(document.querySelector(`[data-stock="${id}"]`).value);
+      try { await api.updateStock(Number(id), { stock_qty: val }); toast("Stock updated"); await refreshCatalog(); }
+      catch (err) { toast(err.message, "error"); }
+    });
+
+    async function refreshCatalog() {
+      await loadProducts(); await loadInventory(); await loadStats(); await loadAnalytics();
+    }
+
     // ----- Orders -----
     async function loadOrders() {
-      const orders = await api.allOrders();
+      ordersCache = await api.allOrders();
       document.getElementById("orderList").innerHTML = `
         <table>
-          <thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Status</th><th>Update</th></tr></thead>
-          <tbody>${orders.map((o) => `
+          <thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Status</th><th>Update</th><th></th></tr></thead>
+          <tbody>${ordersCache.map((o) => `
             <tr>
               <td>${o.id}</td>
-              <td class="muted">user ${o.user_id}</td>
+              <td>${o.customer_name || "—"}<br><span class="muted note">${o.customer_email || ""}</span></td>
               <td>${money(o.total_amount)}</td>
               <td><span class="tag">${o.status}</span></td>
               <td>
@@ -219,14 +337,43 @@
                   ${STATUSES.map((s) => `<option value="${s}" ${s === o.status ? "selected" : ""}>${s}</option>`).join("")}
                 </select>
               </td>
+              <td><button class="btn ghost small" data-vieworder="${o.id}">Details</button></td>
             </tr>`).join("")}</tbody>
         </table>`;
     }
     document.getElementById("orderList").addEventListener("change", async (e) => {
       const id = e.target.dataset.status;
       if (!id) return;
-      try { await api.updateOrderStatus(Number(id), { status: e.target.value }); toast("Status updated"); loadOrders(); }
-      catch (err) { toast(err.message, "error"); loadOrders(); }
+      try { await api.updateOrderStatus(Number(id), { status: e.target.value }); toast("Status updated"); await loadOrders(); await loadAnalytics(); await loadStats(); }
+      catch (err) { toast(err.message, "error"); await loadOrders(); }
+    });
+    document.getElementById("orderList").addEventListener("click", (e) => {
+      if (!e.target.dataset.vieworder) return;
+      const o = ordersCache.find((x) => x.id === Number(e.target.dataset.vieworder));
+      document.getElementById("oBody").innerHTML = `
+        <h3 style="margin-top:0">Order #${o.id}</h3>
+        <p class="note muted">${new Date(o.created_at).toLocaleString()} · <span class="tag">${o.status}</span></p>
+        <p><strong>${o.customer_name || ""}</strong> · ${o.customer_email || ""}</p>
+        <p class="note muted">Txn: ${o.fake_transaction_id || "—"}</p>
+        <p class="note muted">Ship to: ${o.shipping_address || "—"}</p>
+        <table style="margin-top:10px"><tbody>
+          ${o.items.map((it) => `<tr><td>${it.product_name} × ${it.quantity}</td><td style="text-align:right">${money(it.price_at_purchase)}</td></tr>`).join("")}
+        </tbody></table>
+        <div class="row between" style="margin-top:12px"><strong>Total</strong><strong>${money(o.total_amount)}</strong></div>`;
+      document.getElementById("oModal").classList.remove("hidden");
+    });
+    document.getElementById("oClose").addEventListener("click", () => document.getElementById("oModal").classList.add("hidden"));
+
+    // CSV export (client-side)
+    document.getElementById("exportOrders").addEventListener("click", () => {
+      const rows = [["Order ID", "Customer", "Email", "Total", "Status", "Txn", "Date"]];
+      ordersCache.forEach((o) => rows.push([o.id, o.customer_name || "", o.customer_email || "", o.total_amount, o.status, o.fake_transaction_id || "", new Date(o.created_at).toISOString()]));
+      const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "shankis-orders.csv";
+      a.click();
     });
 
     // ----- Users (super admin) -----
@@ -260,13 +407,13 @@
         else if (t.dataset.act) await api.activateUser(Number(t.dataset.act));
         else if (t.dataset.deluser) { if (!confirm("Delete this user?")) return; await api.deleteUser(Number(t.dataset.deluser)); }
         else return;
-        toast("Done"); loadUsers(); loadStats();
+        toast("Done"); await loadUsers(); await loadStats();
       } catch (err) { toast(err.message, "error"); }
     });
     document.getElementById("userList").addEventListener("change", async (e) => {
       if (!e.target.dataset.role) return;
-      try { await api.setRole(Number(e.target.dataset.role), { role: e.target.value }); toast("Role updated"); loadUsers(); }
-      catch (err) { toast(err.message, "error"); loadUsers(); }
+      try { await api.setRole(Number(e.target.dataset.role), { role: e.target.value }); toast("Role updated"); await loadUsers(); }
+      catch (err) { toast(err.message, "error"); await loadUsers(); }
     });
 
     const aModal = document.getElementById("aModal");
@@ -281,7 +428,7 @@
           role: document.getElementById("aRole").value,
         });
         aModal.classList.add("hidden");
-        toast("Account created"); loadUsers(); loadStats();
+        toast("Account created"); await loadUsers(); await loadStats();
       } catch (err) { toast(err.message, "error"); }
     });
 

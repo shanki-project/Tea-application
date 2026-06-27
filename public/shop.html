@@ -77,20 +77,34 @@
       });
     }
 
-    grid.addEventListener("click", async (e) => {
-      const addId = e.target.dataset.add;
-      const viewSlug = e.target.dataset.view;
-      if (addId) {
-        if (!auth.isLoggedIn) { window.location.href = "login.html?next=/shop.html"; return; }
-        if (auth.user?.role !== "customer") { toast("Only customers can shop", "error"); return; }
-        try {
-          await api.addToCart({ product_id: Number(addId), quantity: 1 });
-          toast("Added to your ritual");
-          refreshCartCount();
-        } catch (err) { toast(err.message, "error"); }
+    async function addToCart(productId) {
+      if (!auth.isLoggedIn) {
+        // Remember the intent so we can finish it right after login.
+        localStorage.setItem("pending_cart_add", String(productId));
+        window.location.href = "login.html?next=/shop.html";
+        return;
       }
-      if (viewSlug) openDetail(viewSlug);
+      if (auth.user?.role !== "customer") { toast("Only customers can shop", "error"); return; }
+      try {
+        await api.addToCart({ product_id: Number(productId), quantity: 1 });
+        toast("Added to your ritual");
+        refreshCartCount();
+      } catch (err) { toast(err.message, "error"); }
+    }
+
+    grid.addEventListener("click", async (e) => {
+      if (e.target.dataset.add) addToCart(e.target.dataset.add);
+      if (e.target.dataset.view) openDetail(e.target.dataset.view);
     });
+
+    // Resume a pending "add to cart" after the guest logs in and returns here.
+    (async () => {
+      const pending = localStorage.getItem("pending_cart_add");
+      if (pending && auth.isLoggedIn && auth.user?.role === "customer") {
+        localStorage.removeItem("pending_cart_add");
+        await addToCart(pending);
+      }
+    })();
 
     async function openDetail(slug) {
       const p = await api.product(slug);
@@ -103,6 +117,9 @@
         <p>${p.description || ""}</p>
         <p class="note muted"><strong>Ingredients:</strong> ${p.ingredients || "—"}</p>
         <p class="note muted">In stock: ${p.stock_qty}</p>
+        <button class="btn solid small" data-detail-add="${p.id}" ${p.stock_qty <= 0 ? "disabled" : ""}>
+          ${p.stock_qty <= 0 ? "Sold Out" : "Add to Ritual"}
+        </button>
         <hr style="border-color:var(--line);margin:18px 0" />
         <h3 style="margin:0 0 10px">Reviews ${avg ? `· ${avg}★ (${reviews.length})` : ""}</h3>
         ${
@@ -114,6 +131,9 @@
       document.getElementById("detail").classList.remove("hidden");
     }
 
+    document.getElementById("detailBody").addEventListener("click", (e) => {
+      if (e.target.dataset.detailAdd) addToCart(e.target.dataset.detailAdd);
+    });
     document.getElementById("closeDetail").addEventListener("click", () =>
       document.getElementById("detail").classList.add("hidden")
     );

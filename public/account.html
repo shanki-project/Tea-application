@@ -15,14 +15,16 @@
 
     <div class="tabs">
       <button data-tab="orders" class="active">Orders</button>
+      <button data-tab="reviews">My Reviews</button>
       <button data-tab="profile">Profile</button>
     </div>
 
     <div id="orders"></div>
+    <div id="reviews" class="hidden"></div>
     <div id="profile" class="hidden"></div>
   </div>
 
-  <!-- Review modal -->
+  <!-- Review modal (create or edit) -->
   <div id="reviewModal" class="modal-backdrop hidden">
     <div class="modal" style="text-align:left">
       <h3 id="reviewTitle">Review</h3>
@@ -49,12 +51,13 @@
 
   <script type="module">
     import { api, auth, money, requireLogin } from "./js/api.js";
-    import { mountNav, toast } from "./js/ui.js";
+    import { mountNav, toast, refreshCartCount } from "./js/ui.js";
     mountNav("account");
     if (!requireLogin()) throw new Error("redirecting");
 
     const STEPS = ["placed", "packed", "shipped", "delivered"];
     let me;
+    let myReviews = {}; // productId -> review
 
     function tracker(status) {
       if (status === "cancelled") return '<span class="badge low">Cancelled</span>';
@@ -62,11 +65,20 @@
       return `<div class="tracker">${STEPS.map((s, i) => `<div class="step ${i <= idx ? "done" : ""}">${s}</div>`).join("")}</div>`;
     }
 
+    async function loadReviews() {
+      const list = await api.myReviews();
+      myReviews = {};
+      list.forEach((r) => (myReviews[r.product_id] = r));
+      return list;
+    }
+
     async function renderOrders() {
       const orders = await api.myOrders();
       const el = document.getElementById("orders");
       if (!orders.length) { el.innerHTML = '<p class="muted">No orders yet. <a href="shop.html">Start your ritual.</a></p>'; return; }
-      el.innerHTML = orders.map((o) => `
+      el.innerHTML = orders.map((o) => {
+        const canCancel = o.status === "placed" || o.status === "packed";
+        return `
         <div class="card" style="margin-bottom:20px">
           <div class="row between">
             <div><strong>Order #${o.id}</strong> <span class="muted note">· ${new Date(o.created_at).toLocaleDateString()}</span></div>
@@ -76,33 +88,76 @@
           ${tracker(o.status)}
           <table style="margin-top:14px">
             <tbody>
-              ${o.items.map((it) => `
-                <tr>
+              ${o.items.map((it) => {
+                const rev = myReviews[it.product_id];
+                const reviewBtns = rev
+                  ? `<button class="btn ghost small" data-editrev="${rev.id}" data-pid="${it.product_id}" data-name="${it.product_name}">Edit review</button>
+                     <button class="btn ghost small" data-delrev="${rev.id}">Delete</button>`
+                  : `<button class="btn ghost small" data-review="${it.product_id}" data-name="${it.product_name}">Review</button>`;
+                return `<tr>
                   <td>${it.product_name} × ${it.quantity}</td>
                   <td style="text-align:right">${money(it.price_at_purchase)}</td>
-                  <td style="text-align:right;width:120px">
-                    <button class="btn ghost small" data-review="${it.product_id}" data-name="${it.product_name}">Review</button>
-                  </td>
-                </tr>`).join("")}
+                  <td style="text-align:right;width:200px">${reviewBtns}</td>
+                </tr>`;
+              }).join("")}
             </tbody>
           </table>
-        </div>`).join("");
+          ${canCancel ? `<div style="margin-top:14px;text-align:right"><button class="btn ghost small" data-cancel="${o.id}">Cancel order</button></div>` : ""}
+        </div>`;
+      }).join("");
+    }
+
+    function renderMyReviews(list) {
+      const el = document.getElementById("reviews");
+      if (!list.length) { el.innerHTML = '<p class="muted">You haven\'t reviewed anything yet. Review a product from your Orders.</p>'; return; }
+      el.innerHTML = `
+        <table>
+          <thead><tr><th>Product</th><th>Rating</th><th>Comment</th><th></th></tr></thead>
+          <tbody>${list.map((r) => `
+            <tr>
+              <td>${r.product_name || "—"}</td>
+              <td>${"★".repeat(r.rating)}</td>
+              <td class="muted">${r.comment || ""}</td>
+              <td style="text-align:right">
+                <button class="btn ghost small" data-editrev="${r.id}" data-pid="${r.product_id}" data-name="${r.product_name}">Edit</button>
+                <button class="btn ghost small" data-delrev="${r.id}">Delete</button>
+              </td>
+            </tr>`).join("")}</tbody>
+        </table>`;
     }
 
     async function renderProfile() {
       const p = await api.getProfile();
       document.getElementById("profile").innerHTML = `
-        <div class="card" style="max-width:520px">
+        <div class="card" style="max-width:520px;margin-bottom:24px">
+          <h3 style="margin-top:0">Details</h3>
           <div class="field"><label>Name</label><input class="input" id="pName" value="${p.name}" /></div>
           <div class="field"><label>Email</label><input class="input" value="${p.email}" disabled /></div>
           <div class="field"><label>Saved address</label><textarea class="input" id="pAddr" rows="3">${p.address || ""}</textarea></div>
           <button class="btn solid" id="saveProfile">Save</button>
+        </div>
+        <div class="card" style="max-width:520px">
+          <h3 style="margin-top:0">Change password</h3>
+          <div class="field"><label>Current password</label><input class="input" type="password" id="curPw" /></div>
+          <div class="field"><label>New password (min 8)</label><input class="input" type="password" id="newPw" minlength="8" /></div>
+          <button class="btn" id="changePw">Update password</button>
         </div>`;
       document.getElementById("saveProfile").addEventListener("click", async () => {
         try {
           me = await api.updateProfile({ name: document.getElementById("pName").value, address: document.getElementById("pAddr").value });
           auth.user = me;
           toast("Profile saved");
+        } catch (e) { toast(e.message, "error"); }
+      });
+      document.getElementById("changePw").addEventListener("click", async () => {
+        try {
+          await api.changePassword({
+            current_password: document.getElementById("curPw").value,
+            new_password: document.getElementById("newPw").value,
+          });
+          document.getElementById("curPw").value = "";
+          document.getElementById("newPw").value = "";
+          toast("Password updated");
         } catch (e) { toast(e.message, "error"); }
       });
     }
@@ -112,40 +167,72 @@
       b.addEventListener("click", () => {
         document.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("active"));
         b.classList.add("active");
-        const tab = b.dataset.tab;
-        document.getElementById("orders").classList.toggle("hidden", tab !== "orders");
-        document.getElementById("profile").classList.toggle("hidden", tab !== "profile");
+        ["orders", "reviews", "profile"].forEach((t) =>
+          document.getElementById(t).classList.toggle("hidden", t !== b.dataset.tab)
+        );
       })
     );
 
-    // Review modal
+    // ----- Review modal (shared create/edit) -----
     const rm = document.getElementById("reviewModal");
-    let reviewProductId = null;
-    document.getElementById("orders").addEventListener("click", (e) => {
-      if (e.target.dataset.review) {
-        reviewProductId = Number(e.target.dataset.review);
-        document.getElementById("reviewTitle").textContent = "Review " + e.target.dataset.name;
-        rm.classList.remove("hidden");
+    let reviewMode = "create"; // or "edit"
+    let reviewTargetId = null; // productId for create, reviewId for edit
+
+    function openReviewModal(mode, id, name, existing) {
+      reviewMode = mode;
+      reviewTargetId = id;
+      document.getElementById("reviewTitle").textContent = (mode === "edit" ? "Edit review · " : "Review ") + (name || "");
+      document.getElementById("rRating").value = existing ? String(existing.rating) : "5";
+      document.getElementById("rComment").value = existing ? (existing.comment || "") : "";
+      rm.classList.remove("hidden");
+    }
+
+    async function handleReviewClick(e) {
+      const t = e.target;
+      if (t.dataset.review) openReviewModal("create", Number(t.dataset.review), t.dataset.name);
+      else if (t.dataset.editrev) {
+        const rev = Object.values(myReviews).find((r) => r.id === Number(t.dataset.editrev));
+        openReviewModal("edit", Number(t.dataset.editrev), t.dataset.name, rev);
+      } else if (t.dataset.delrev) {
+        if (!confirm("Delete this review?")) return;
+        try { await api.deleteReview(Number(t.dataset.delrev)); toast("Review deleted"); await refreshAll(); }
+        catch (err) { toast(err.message, "error"); }
+      } else if (t.dataset.cancel) {
+        if (!confirm("Cancel this order? Items will be returned to stock.")) return;
+        try { await api.cancelOrder(Number(t.dataset.cancel)); toast("Order cancelled"); await refreshAll(); }
+        catch (err) { toast(err.message, "error"); }
       }
-    });
+    }
+    document.getElementById("orders").addEventListener("click", handleReviewClick);
+    document.getElementById("reviews").addEventListener("click", handleReviewClick);
+
     document.getElementById("rCancel").addEventListener("click", () => rm.classList.add("hidden"));
     document.getElementById("rSubmit").addEventListener("click", async () => {
+      const payload = {
+        rating: Number(document.getElementById("rRating").value),
+        comment: document.getElementById("rComment").value,
+      };
       try {
-        await api.addReview(reviewProductId, {
-          rating: Number(document.getElementById("rRating").value),
-          comment: document.getElementById("rComment").value,
-        });
+        if (reviewMode === "create") await api.addReview(reviewTargetId, payload);
+        else await api.updateReview(reviewTargetId, payload);
         rm.classList.add("hidden");
         toast("Thank you for your review");
-        document.getElementById("rComment").value = "";
+        await refreshAll();
       } catch (e) { toast(e.message, "error"); }
     });
+
+    async function refreshAll() {
+      const list = await loadReviews();
+      await renderOrders();
+      renderMyReviews(list);
+    }
 
     (async () => {
       me = auth.user || (await api.me());
       document.getElementById("hello").textContent = `Welcome, ${me.name}`;
-      await renderOrders();
+      await refreshAll();
       await renderProfile();
+      refreshCartCount();
     })();
   </script>
 </body>

@@ -7,10 +7,12 @@ from app.core.security import (
     create_password_reset_token,
     decode_token,
     hash_password,
+    verify_password,
 )
 from app.crud import user as user_crud
 from app.models.user import User
 from app.schemas.auth import (
+    ChangePassword,
     LoginRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
@@ -51,6 +53,22 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserRead)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePassword,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Password changed successfully."}
 
 
 @router.post("/password-reset/request")

@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # --- Catalog ---
     LOW_STOCK_THRESHOLD: int = 10  # products at/below this flag as low stock
 
+    # --- Uploads (product images) ---
+    # Overridden in Docker to a mounted volume path via the UPLOAD_DIR env var.
+    UPLOAD_DIR: str = str(BASE_DIR / "uploads")
+    MAX_UPLOAD_MB: int = 5
+
     # --- Seed (used by scripts/seed.py to create the first Super Admin) ---
     SUPERADMIN_NAME: str = "Super Admin"
     SUPERADMIN_EMAIL: str = "superadmin@shankistea.com"

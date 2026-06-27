@@ -23,3 +23,4 @@ class ReviewRead(BaseModel):
     comment: str | None = None
     created_at: datetime
     user_name: str | None = None
+    product_name: str | None = None

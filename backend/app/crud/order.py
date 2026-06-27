@@ -1,11 +1,14 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.order import Order, OrderItem
 
 
 def _with_items(stmt):
-    return stmt.options(selectinload(Order.items).joinedload(OrderItem.product))
+    return stmt.options(
+        selectinload(Order.items).joinedload(OrderItem.product),
+        joinedload(Order.user),
+    )
 
 
 def get(db: Session, order_id: int) -> Order | None:

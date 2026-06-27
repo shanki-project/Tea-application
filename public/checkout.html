@@ -105,7 +105,15 @@
       }
     });
 
+    async function prefillAddress() {
+      try {
+        const p = await api.getProfile();
+        if (p.address) document.getElementById("address").value = p.address;
+      } catch { /* ignore */ }
+    }
+
     loadSummary();
+    prefillAddress();
   </script>
 </body>
 </html>

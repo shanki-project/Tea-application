@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     STATIC_DIR=/app/public \
+    UPLOAD_DIR=/app/uploads \
     PORT=8000
 
 WORKDIR /app
@@ -27,7 +28,10 @@ COPY public/ /app/public/
 
 RUN chmod +x /app/scripts/start.sh \
     && adduser --disabled-password --gecos "" appuser \
+    && mkdir -p /app/uploads \
     && chown -R appuser:appuser /app
+# A named volume mounted at /app/uploads inherits this ownership on first creation,
+# so the non-root app user can write uploaded images.
 USER appuser
 
 EXPOSE 8000

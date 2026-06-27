@@ -33,6 +33,12 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_PREFIX)
 
 
+# --- Uploaded product images (served at /uploads/<name>) ---
+_upload_dir = Path(settings.UPLOAD_DIR)
+_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")
+
+
 # --- Static frontend ---
 # `html=True` makes StaticFiles serve index.html at "/" and handle client-side
 # routing fallbacks. Mounted last so it doesn't shadow the API.

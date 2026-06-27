@@ -46,8 +46,13 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_DB: ${MYSQL_DB}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      UPLOAD_DIR: /app/uploads
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Persist uploaded product images across container rebuilds.
+      - uploads_data:/app/uploads
 
 volumes:
   db_data:
+  uploads_data:
