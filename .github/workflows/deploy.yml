@@ -1,7 +1,7 @@
 name: CI/CD - Shankis Tea
 
 # ------------------------------------------------------------
-# Trigger
+# Trigger,
 # Runs on:
 # - Every push to main
 # - Every pull request targeting main
