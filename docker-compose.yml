@@ -29,9 +29,7 @@ services:
       start_period: 30s
 
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: ghcr.io/shanki-project/tea-application:latest
     restart: unless-stopped
     depends_on:
       db:
