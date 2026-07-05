@@ -1,157 +1,237 @@
 name: CI/CD - Shankis Tea
 
-# Stage 1: Trigger — runs on every push to main, and on pull requests targeting main
+# ------------------------------------------------------------
+# Trigger
+# Runs on:
+# - Every push to main
+# - Every pull request targeting main
+# - Manual execution
+# ------------------------------------------------------------
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+
   pull_request:
-    branches: [main]
+    branches:
+      - main
+
   workflow_dispatch:
 
 jobs:
-  # ---------------------------------------------------------------------
-  # CI: fetch code -> install deps & build -> run tests
-  # ---------------------------------------------------------------------
+
+  # ============================================================
+  # Stage 1 - Continuous Integration (Testing)
+  # ============================================================
   test:
     name: Test
     runs-on: ubuntu-latest
+
     steps:
-      # Stage 2: Fetch the code
+      # Fetch source code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Install Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
+          cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
-      # Stage 3: Install deps & build
+      # Install project dependencies
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements-dev.txt
+        run: |
+          pip install -r requirements-dev.txt
 
-      # Stage 4: Run tests (lint + unit/integration)
-      # Note: tests run against an in-memory SQLite DB (see tests/conftest.py),
-      # so no MySQL service container is needed here — this job stays fast and simple.
-      - name: Lint with ruff
+      # Run linting
+      - name: Lint with Ruff
         working-directory: backend
-        run: ruff check .
+        run: |
+          ruff check .
 
-      - name: Run pytest
+      # Run tests
+      # Uses SQLite in-memory database
+      - name: Run Pytest
         working-directory: backend
-        run: pytest -v
+        run: |
+          pytest -v
 
-  # ---------------------------------------------------------------------
-  # CI: package artifact -> push to registry
-  # Only runs after tests pass, and only on pushes to main (not on PRs) —
-  # we don't want every PR building and pushing an image.
-  # ---------------------------------------------------------------------
+  # ============================================================
+  # Stage 2 - Build & Push Docker Image
+  # ============================================================
   build-and-push:
-    name: Build & push image
+    name: Build & Push Image
+
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    if: github.event_name == 'push' &&
+        github.ref == 'refs/heads/main'
+
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
+
     steps:
+
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Sets up the "docker-container" buildx driver, which is required for
-      # the GitHub Actions cache backend (cache-to/cache-from: type=gha) below.
-      # The default "docker" driver on GitHub-hosted runners doesn't support it.
+      # Required for GitHub cache backend
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Docker image names must be entirely lowercase, but github.repository
-      # preserves the repo's actual case (e.g. "Tea-application"). This
-      # computes a lowercase version and exports it for later steps.
-      - name: Set lowercase image name
-        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+      # Docker image names must be lowercase
+      - name: Set image name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Log in to GitHub Container Registry
+      # Login to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Stage 5: Package artifact
-      - name: Build and push Docker image
+      # Build and Push Docker image
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: backend/Dockerfile
+
           push: true
+
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ---------------------------------------------------------------------
-  # CD: deploy -> health check -> (rollback is manual here; see notes below)
-  # ---------------------------------------------------------------------
+  # ============================================================
+  # Stage 3 - Continuous Deployment
+  # ============================================================
   deploy:
     name: Deploy to EC2
+
     needs: build-and-push
+
     runs-on: ubuntu-latest
-    environment: production   # lets you require manual approval in repo Settings > Environments
+
+    environment: production
+
     steps:
-      # Stage 7: Deploy — SSH into the EC2 instance and pull + restart the stack
+
+      # --------------------------------------------------------
+      # Deploy application
+      # --------------------------------------------------------
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
+
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+
           script: |
             set -e
+
             APP_DIR=~/Tea-application
 
-            # Clone the repo the first time; pull the latest on every run after
-            # that. Runs as ec2-user (whoever SSH logs in as), so ownership is
-            # correct automatically — no manual copying or chown needed.
-            # Note: .env is gitignored, so it's never touched by clone/pull —
-            # it must already exist in APP_DIR from your one-time manual setup.
+            #####################################################
+            # Clone repository (first deployment)
+            # or pull latest changes (subsequent deployments)
+            #####################################################
+
             if [ -d "$APP_DIR/.git" ]; then
               cd "$APP_DIR"
-              # Force origin to the correct repo every run, in case this folder
-              # was originally cloned from somewhere else (e.g. a different fork).
-              git remote set-url origin https://github.com{{ github.repository }}.git
+
+              git remote set-url origin https://github.com/${{ github.repository }}.git
+
               git fetch origin main
+
               git reset --hard origin/main
+
             else
-              git clone https://github.com{{ github.repository }}.git "$APP_DIR"
+
+              git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
+
               cd "$APP_DIR"
+
             fi
 
+            #####################################################
+            # Login to GitHub Container Registry
+            #####################################################
+
             IMAGE_NAME="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io \
+              -u ${{ github.actor }} \
+              --password-stdin
+
+            #####################################################
+            # Pull latest image
+            #####################################################
+
             docker pull "$IMAGE_NAME:latest"
-            # --wait blocks here until every service's HEALTHCHECK reports
-            # healthy (or times out after --wait-timeout), instead of a guessed
-            # sleep — this is what fixes cold-start deploys taking 30-60+ seconds.
-            docker compose up -d --no-build --wait --wait-timeout 120
+
+            #####################################################
+            # Start containers
+            #####################################################
+
+            docker compose up -d \
+              --no-build \
+              --wait \
+              --wait-timeout 120
+
+            #####################################################
+            # Cleanup unused images
+            #####################################################
+
             docker image prune -f
 
-      # Stage 8: Health check — fail the whole workflow if the app didn't come back up
+      # --------------------------------------------------------
+      # Health Checks
+      # --------------------------------------------------------
       - name: Verify deployment
         uses: appleboy/ssh-action@v1
+
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+
           script: |
             curl -fsS http://localhost:8000/api/health
             curl -fsS http://localhost:8000/api/health/db
 
-      # Stage 9: Monitor & rollback
-      # This workflow does not auto-rollback (that needs more infrastructure —
-      # e.g. keeping the previous image tag and re-deploying it on failure).
-      # For now: if "Verify deployment" fails, the job goes red in the Actions
-      # tab and you get a notification — that's your signal to manually run
-      # `docker compose up -d` with the previous :sha tag on the EC2 box.
+# ============================================================
+# Notes
+#
+# ✔ CI runs on every Push and Pull Request.
+#
+# ✔ Docker image is built only after tests pass.
+#
+# ✔ Docker image is pushed only for main branch.
+#
+# ✔ Deployment waits until all containers are healthy.
+#
+# ✔ Health endpoints are verified after deployment.
+#
+# ✔ Rollback is currently manual by deploying a previous SHA tag.
+#
+# Future Improvements:
+# - Automatic rollback
+# - Security scanning (Trivy)
+# - Slack/MS Teams notifications
+# - Blue-Green deployment
+# - Canary deployment
+# - Image signing (Cosign)
+# ============================================================
