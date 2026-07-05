@@ -1,12 +1,5 @@
 name: CI/CD - Shankis Tea
 
-# ------------------------------------------------------------
-# Trigger,
-# Runs on:
-# - Every push to main
-# - Every pull request targeting main
-# - Manual execution
-# ------------------------------------------------------------
 on:
   push:
     branches:
@@ -20,19 +13,17 @@ on:
 
 jobs:
 
-  # ============================================================
-  # Stage 1 - Continuous Integration (Testing)
-  # ============================================================
+  ############################################################
+  # CI - Test
+  ############################################################
   test:
     name: Test
     runs-on: ubuntu-latest
 
     steps:
-      # Fetch source code
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      # Install Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -40,83 +31,63 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
-      # Install project dependencies
       - name: Install dependencies
         working-directory: backend
         run: |
           pip install -r requirements-dev.txt
 
-      # Run linting
       - name: Lint with Ruff
         working-directory: backend
         run: |
           ruff check .
 
-      # Run tests
-      # Uses SQLite in-memory database
-      - name: Run Pytest
+      - name: Run Tests
         working-directory: backend
         run: |
           pytest -v
 
-  # ============================================================
-  # Stage 2 - Build & Push Docker Image
-  # ============================================================
+  ############################################################
+  # Build Docker Image & Push to Docker Hub
+  ############################################################
   build-and-push:
-    name: Build & Push Image
+    name: Build & Push Docker Image
 
     needs: test
 
-    if: github.event_name == 'push' &&
-        github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      # Required for GitHub cache backend
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Docker image names must be lowercase
-      - name: Set image name
-        run: |
-          echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      # Login to GitHub Container Registry
-      - name: Login to GHCR
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build and Push Docker image
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: backend/Dockerfile
-
           push: true
 
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/tea-application:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/tea-application:${{ github.sha }}
 
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ============================================================
-  # Stage 3 - Continuous Deployment
-  # ============================================================
+  ############################################################
+  # CD - Deploy to EC2
+  ############################################################
   deploy:
     name: Deploy to EC2
 
@@ -128,10 +99,7 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------------
-      # Deploy application
-      # --------------------------------------------------------
-      - name: Deploy over SSH
+      - name: Deploy Application
         uses: appleboy/ssh-action@v1
 
         with:
@@ -142,65 +110,19 @@ jobs:
           script: |
             set -e
 
-            APP_DIR=~/Tea-application
+            cd ~/Tea-application
 
-            #####################################################
-            # Clone repository (first deployment)
-            # or pull latest changes (subsequent deployments)
-            #####################################################
-
-            if [ -d "$APP_DIR/.git" ]; then
-              cd "$APP_DIR"
-
-              git remote set-url origin https://github.com/${{ github.repository }}.git
-
-              git fetch origin main
-
-              git reset --hard origin/main
-
-            else
-
-              git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
-
-              cd "$APP_DIR"
-
-            fi
-
-            #####################################################
-            # Login to GitHub Container Registry
-            #####################################################
-
-            IMAGE_NAME="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io \
-              -u shanki-project \
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login \
+              -u "${{ secrets.DOCKERHUB_USERNAME }}" \
               --password-stdin
 
-            #####################################################
-            # Pull latest image
-            #####################################################
+            docker compose pull
 
-            docker pull "$IMAGE_NAME:latest"
-
-            #####################################################
-            # Start containers
-            #####################################################
-
-            docker compose up -d \
-              --no-build \
-              --wait \
-              --wait-timeout 120
-
-            #####################################################
-            # Cleanup unused images
-            #####################################################
+            docker compose up -d --force-recreate
 
             docker image prune -f
 
-      # --------------------------------------------------------
-      # Health Checks
-      # --------------------------------------------------------
-      - name: Verify deployment
+      - name: Verify Deployment
         uses: appleboy/ssh-action@v1
 
         with:
@@ -209,29 +131,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
 
           script: |
-            curl -fsS http://localhost:8000/api/health
-            curl -fsS http://localhost:8000/api/health/db
+            set -e
 
-# ============================================================
-# Notes
-#
-# ✔ CI runs on every Push and Pull Request.
-#
-# ✔ Docker image is built only after tests pass.
-#
-# ✔ Docker image is pushed only for main branch.
-#
-# ✔ Deployment waits until all containers are healthy.
-#
-# ✔ Health endpoints are verified after deployment.
-#
-# ✔ Rollback is currently manual by deploying a previous SHA tag.
-#
-# Future Improvements:
-# - Automatic rollback
-# - Security scanning (Trivy)
-# - Slack/MS Teams notifications
-# - Blue-Green deployment
-# - Canary deployment
-# - Image signing (Cosign)
-# ============================================================
+            curl -fsS http://localhost:8000/api/health
+
+            curl -fsS http://localhost:8000/api/health/db
