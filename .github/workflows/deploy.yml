@@ -173,7 +173,7 @@ jobs:
             IMAGE_NAME="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
 
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io \
-              -u ${{ github.actor }} \
+              -u shanki-project \
               --password-stdin
 
             #####################################################
