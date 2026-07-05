@@ -3,20 +3,19 @@
 #
 #   docker compose up --build
 #
-# Backend:  http://localhost:8000        (website)
+# Backend:  http://localhost:8000
 # API docs: http://localhost:8000/api/docs
+
 services:
   db:
     image: mysql:8.4
+    container_name: tea-db
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${MYSQL_DB}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-    # Host port for optional external access (e.g. a DB GUI). The backend talks
-    # to MySQL over the internal network, so this isn't required by the app.
-    # Defaults to 3307 to avoid clashing with a local MySQL on 3306.
     ports:
       - "${MYSQL_HOST_PORT:-3307}:3306"
     volumes:
@@ -29,6 +28,7 @@ services:
       start_period: 30s
 
   backend:
+    container_name: tea-backend
     image: ghcr.io/shanki-project/tea-application:latest
     restart: unless-stopped
     depends_on:
@@ -48,7 +48,6 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
-      # Persist uploaded product images across container rebuilds.
       - uploads_data:/app/uploads
 
 volumes:
