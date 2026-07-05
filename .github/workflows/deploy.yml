@@ -8,7 +8,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-
 jobs:
   # ---------------------------------------------------------------------
   # CI: fetch code -> install deps & build -> run tests
@@ -120,10 +119,13 @@ jobs:
             # it must already exist in APP_DIR from your one-time manual setup.
             if [ -d "$APP_DIR/.git" ]; then
               cd "$APP_DIR"
+              # Force origin to the correct repo every run, in case this folder
+              # was originally cloned from somewhere else (e.g. a different fork).
+              git remote set-url origin https://github.com{{ github.repository }}.git
               git fetch origin main
               git reset --hard origin/main
             else
-              git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
+              git clone https://github.com{{ github.repository }}.git "$APP_DIR"
               cd "$APP_DIR"
             fi
 
