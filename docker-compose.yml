@@ -29,7 +29,7 @@ services:
 
   backend:
     container_name: tea-backend
-    image: ghcr.io/shanki-project/tea-application:latest
+    image: kinni1621/tea-application:latest
     restart: unless-stopped
     depends_on:
       db:
