@@ -118,7 +118,7 @@ jobs:
 
             docker compose pull
 
-            docker compose up -d --force-recreate
+            docker compose up -d --force-recreate --wait --wait-timeout 120
 
             docker image prune -f
 
