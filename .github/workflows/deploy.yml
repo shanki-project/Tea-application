@@ -112,7 +112,7 @@ jobs:
             IMAGE_NAME="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull "$IMAGE_NAME:latest"
-            docker compose up -d --no-build
+            docker compose up -d --no-build --wait --wait-timeout 120
             docker image prune -f
 
       # Stage 8: Health check — fail the whole workflow if the app didn't come back up
