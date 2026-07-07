@@ -1,0 +1,101 @@
+name: CI/CD - Shankis Tea (EKS via Bastion)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------
+  # Test — the only job that runs on GitHub's own runner
+  # ---------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint with Ruff
+        working-directory: backend
+        run: ruff check .
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -v
+
+  # ---------------------------------------------------------
+  # Deploy — everything else happens on the bastion over SSH:
+  # checkout (git pull), build, push, and the kubectl deploy.
+  # ---------------------------------------------------------
+  deploy:
+    name: Build, Push & Deploy via Bastion
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout, build, push, and deploy on the bastion
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.BASTION_HOST }}
+          username: ${{ secrets.BASTION_USER }}
+          key: ${{ secrets.BASTION_SSH_KEY }}
+          script: |
+            set -e
+            APP_DIR=~/Tea-application
+
+            # --- "Checkout" happens here, on the bastion ---
+            if [ -d "$APP_DIR/.git" ]; then
+              cd "$APP_DIR"
+              git remote set-url origin https://github.com/${{ github.repository }}.git
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
+              cd "$APP_DIR"
+            fi
+
+            # --- Build the image, right here on the bastion ---
+            IMAGE_TAG="${{ github.sha }}"
+            docker build -f backend/Dockerfile -t "${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG" .
+            docker tag "${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG" "${{ secrets.DOCKERHUB_USERNAME }}/tea-application:latest"
+
+            # --- Push to Docker Hub ---
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG"
+            docker push "${{ secrets.DOCKERHUB_USERNAME }}/tea-application:latest"
+
+            # --- Deploy to EKS using kubectl already configured on this bastion ---
+            kubectl set image deployment/shankistea-backend \
+              backend="${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG"
+            kubectl rollout status deployment/shankistea-backend --timeout=180s
+
+            # --- Clean up old local images so the small bastion disk doesn't fill up ---
+            docker image prune -f
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.BASTION_HOST }}
+          username: ${{ secrets.BASTION_USER }}
+          key: ${{ secrets.BASTION_SSH_KEY }}
+          script: |
+            set -e
+            SVC_HOST=$(kubectl get svc shankistea-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            echo "Testing http://$SVC_HOST/api/health"
+            curl -fsS "http://$SVC_HOST/api/health"
+            curl -fsS "http://$SVC_HOST/api/health/db"
