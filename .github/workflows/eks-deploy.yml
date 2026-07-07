@@ -74,7 +74,7 @@ jobs:
             # and since the tag genuinely changes every run, `kubectl apply`
             # detects the change and triggers a real rolling update on its own
             # (no rollout-restart workaround needed, unlike a static :latest tag).
-            sed -i "s|image: .*tea-application:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG|" k8s/deployment.yaml
+            sed -i "s|image: .*tea-application:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG|" k8s/deployment.yml
             kubectl apply -f k8s/secret.yml
             kubectl apply -f k8s/configmap.yml
             kubectl apply -f k8s/deployment.yml
