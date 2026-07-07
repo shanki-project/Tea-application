@@ -75,10 +75,10 @@ jobs:
             # detects the change and triggers a real rolling update on its own
             # (no rollout-restart workaround needed, unlike a static :latest tag).
             sed -i "s|image: .*tea-application:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/tea-application:$IMAGE_TAG|" k8s/deployment.yaml
-            kubectl apply -f k8s/secret.yaml
-            kubectl apply -f k8s/configmap.yaml
-            kubectl apply -f k8s/deployment.yaml
-            kubectl apply -f k8s/service.yaml
+            kubectl apply -f k8s/secret.yml
+            kubectl apply -f k8s/configmap.yml
+            kubectl apply -f k8s/deployment.yml
+            kubectl apply -f k8s/serv.yml
             kubectl rollout status deployment/shankistea-backend --timeout=180s
             # --- Clean up old local images so the small bastion disk doesn't fill up ---
             docker image prune -f
