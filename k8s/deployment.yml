@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shankistea-backend
+  labels:
+    app: shankistea-backend
+spec:
+  replicas: 2   # one pod per worker node, spreading load across both t3.small nodes
+  selector:
+    matchLabels:
+      app: shankistea-backend
+  template:
+    metadata:
+      labels:
+        app: shankistea-backend
+    spec:
+      containers:
+        - name: backend
+          image: kinni1621/tea-application:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: shankistea-config
+            - secretRef:
+                name: shankistea-secret
+          # Mirrors the same health endpoints your Dockerfile's HEALTHCHECK uses —
+          # Kubernetes uses these to decide if a pod is alive and ready for traffic.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health/db
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

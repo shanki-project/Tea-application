@@ -1,0 +1,17 @@
+# Exposes the backend pods behind a stable network identity.
+# type: LoadBalancer tells EKS to provision an AWS Network Load Balancer
+# automatically, giving you a real external address to reach the app from
+# the internet — the EKS equivalent of the "ports: 8000:8000" mapping in
+# docker-compose.yml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: shankistea-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: shankistea-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000

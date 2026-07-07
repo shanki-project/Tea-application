@@ -1,0 +1,15 @@
+# Non-sensitive config — plain text, no encoding needed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shankistea-config
+data:
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  CORS_ORIGINS: "*"
+  MYSQL_HOST: "shankisteadb.cwtaai4wcm4k.us-east-1.rds.amazonaws.com"          # e.g. shankistea-db.xxxxx.us-east-1.rds.amazonaws.com
+  MYSQL_PORT: "3306"
+  MYSQL_USER: "shankis"
+  MYSQL_DB: "shankistea"
+  WEB_CONCURRENCY: "2"
+  UPLOAD_DIR: "/app/uploads"
